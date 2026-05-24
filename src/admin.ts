@@ -241,3 +241,98 @@ export async function updateScript(request: Request, env: Env): Promise<Response
   await env.KV.put('script', body.script || '');
   return Response.json({ ok: true });
 }
+
+// ==================== 导入导出 ====================
+
+export async function importMerge(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { yaml: string };
+  if (!body.yaml) return Response.json({ error: 'yaml 必填' }, { status: 400 });
+
+  let doc: Record<string, unknown>;
+  try {
+    doc = yaml.load(body.yaml) as Record<string, unknown>;
+  } catch {
+    return Response.json({ error: 'YAML 解析失败' }, { status: 400 });
+  }
+
+  let upstreamCount = 0;
+  let nodeCount = 0;
+
+  // 解析 proxy-providers → upstreams
+  const providers = doc['proxy-providers'] as Record<string, Record<string, unknown>> | undefined;
+  if (providers) {
+    const raw = await env.KV.get('upstreams');
+    const existing: Upstream[] = raw ? JSON.parse(raw) : [];
+    const existingNames = new Set(existing.map(u => u.name));
+
+    for (const [name, provider] of Object.entries(providers)) {
+      if (existingNames.has(name)) continue;
+      const url = provider.url as string;
+      if (!url) continue;
+      const headers = provider.header as Record<string, unknown> | undefined;
+      let userAgent = 'clash.meta';
+      if (headers?.['User-Agent']) {
+        const ua = headers['User-Agent'];
+        userAgent = Array.isArray(ua) ? ua[0] : String(ua);
+      }
+      existing.push({
+        name, url, userAgent,
+        lastUpdate: null, nodeCount: 0, lastError: null,
+      });
+      upstreamCount++;
+    }
+    await env.KV.put('upstreams', JSON.stringify(existing));
+  }
+
+  // 解析 proxies → custom-nodes
+  const proxies = doc.proxies as ProxyNode[] | undefined;
+  if (proxies && Array.isArray(proxies)) {
+    const raw = await env.KV.get('custom-nodes');
+    const existing: ProxyNode[] = raw ? JSON.parse(raw) : [];
+    const existingNames = new Set(existing.map(n => n.name));
+
+    for (const node of proxies) {
+      if (!node.name || existingNames.has(node.name)) continue;
+      existing.push(node);
+      existingNames.add(node.name);
+      nodeCount++;
+    }
+    await env.KV.put('custom-nodes', JSON.stringify(existing));
+  }
+
+  return Response.json({ ok: true, upstreamCount, nodeCount });
+}
+
+export async function exportMerge(env: Env): Promise<Response> {
+  // 重建 proxy-providers
+  const upRaw = await env.KV.get('upstreams');
+  const upstreams: Upstream[] = upRaw ? JSON.parse(upRaw) : [];
+  const providers: Record<string, unknown> = {};
+  for (const u of upstreams) {
+    providers[u.name] = {
+      type: 'http',
+      url: u.url,
+      interval: 3600,
+      path: `./providers/${u.name}.yaml`,
+      'health-check': { enable: true, interval: 600, url: 'https://www.gstatic.com/generate_204' },
+      override: { 'additional-prefix': `${u.name} | ` },
+      header: { 'User-Agent': [u.userAgent, 'Mihomo'] },
+    };
+  }
+
+  // 重建 proxies
+  const nodeRaw = await env.KV.get('custom-nodes');
+  const nodes: ProxyNode[] = nodeRaw ? JSON.parse(nodeRaw) : [];
+
+  const doc: Record<string, unknown> = {};
+  if (Object.keys(providers).length > 0) doc['proxy-providers'] = providers;
+  if (nodes.length > 0) doc['proxies'] = nodes;
+
+  const yamlText = yaml.dump(doc, { lineWidth: -1, noRefs: true, quotingType: '"' });
+  return new Response(yamlText, {
+    headers: {
+      'Content-Type': 'text/yaml; charset=utf-8',
+      'Content-Disposition': 'attachment; filename="merge.yaml"',
+    },
+  });
+}

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Clash Sub Hub - Admin</title>
+<title>🚀 Clash Sub Hub</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
@@ -19,7 +19,7 @@
 <!-- Login -->
 <div id="login-page" class="flex items-center justify-center min-h-screen">
   <div class="bg-white p-8 rounded-lg shadow-md w-80">
-    <h1 class="text-xl font-bold mb-6 text-center">Clash Sub Hub</h1>
+    <h1 class="text-xl font-bold mb-6 text-center">🚀 Clash Sub Hub</h1>
     <input id="password-input" type="password" placeholder="管理密码"
       class="w-full px-3 py-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
       onkeydown="if(event.key==='Enter')login()">
@@ -30,8 +30,20 @@
 <!-- Dashboard -->
 <div id="dashboard" class="hidden max-w-5xl mx-auto p-4">
   <div class="flex items-center justify-between mb-6">
-    <h1 class="text-xl font-bold">Clash Sub Hub</h1>
-    <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500">退出</button>
+    <h1 class="text-xl font-bold">🚀 Clash Sub Hub</h1>
+    <div class="flex gap-2 items-center">
+      <label class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-200">
+        导入 Merge
+        <input type="file" accept=".yaml,.yml" class="hidden" onchange="importMergeFile(this)">
+      </label>
+      <button onclick="exportMergeFile()" class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-200">导出 Merge</button>
+      <label class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-200">
+        导入脚本
+        <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
+      </label>
+      <button onclick="exportScriptFile()" class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-200">导出脚本</button>
+      <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 ml-2">退出</button>
+    </div>
   </div>
 
   <!-- Tabs -->
@@ -373,6 +385,58 @@ async function saveScript() {
 function copyScriptUrl() {
   navigator.clipboard.writeText(`${BASE}/script.js`);
   toast('脚本链接已复制');
+}
+
+// ==================== Import/Export ====================
+async function importMergeFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const { ok, data } = await api('/api/import/merge', { method: 'POST', body: { yaml: text } });
+  if (ok) {
+    toast(`导入成功: ${data.upstreamCount} 个订阅, ${data.nodeCount} 个节点`);
+    loadUpstreams();
+    loadNodes();
+  } else {
+    toast(data?.error || '导入失败', false);
+  }
+  input.value = '';
+}
+
+async function exportMergeFile() {
+  const resp = await fetch(BASE + '/api/export/merge', { headers: { 'Authorization': `Bearer ${KEY}` } });
+  const text = await resp.text();
+  download('merge.yaml', text, 'text/yaml');
+  toast('Merge 配置已导出');
+}
+
+async function importScriptFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const text = await file.text();
+  await api('/api/script', { method: 'POST', body: { script: text } });
+  toast('脚本已导入');
+  loadScript();
+  input.value = '';
+}
+
+async function exportScriptFile() {
+  const { data } = await api('/api/script');
+  if (data?.script) {
+    download('script.js', data.script, 'application/javascript');
+    toast('脚本已导出');
+  } else {
+    toast('暂无脚本', false);
+  }
+}
+
+function download(filename, content, type) {
+  const blob = new Blob([content], { type });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 
 // ==================== Utils ====================

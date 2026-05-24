@@ -8,6 +8,7 @@ import {
   testUpstream, testExistingUpstream, refreshAll,
   listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode,
   getScript, updateScript,
+  importMerge, exportMerge,
 } from './admin';
 import UI_HTML from './ui.html';
 
@@ -110,6 +111,10 @@ async function routeApi(
   // 脚本
   if (path === '/api/script' && method === 'GET') return getScript(env);
   if (path === '/api/script' && method === 'POST') return updateScript(request, env);
+
+  // 导入导出
+  if (path === '/api/import/merge' && method === 'POST') return importMerge(request, env);
+  if (path === '/api/export/merge' && method === 'GET') return exportMerge(env);
 
   return Response.json({ error: 'Not Found' }, { status: 404 });
 }
