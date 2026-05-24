@@ -56,10 +56,17 @@ async function collectAllNodes(env: Env): Promise<ProxyNode[]> {
     upstreams.map((u) => env.KV.get(`cache:${u.name}`))
   );
 
-  for (const cache of cacheResults) {
+  for (let i = 0; i < upstreams.length; i++) {
+    const cache = cacheResults[i];
     if (cache) {
       const nodes = parseClashYaml(cache);
-      allNodes.push(...filterNodes(nodes));
+      const filtered = filterNodes(nodes);
+      // 给每个上游节点加前缀，和 Clash Verge additional-prefix 效果一致
+      const prefix = `${upstreams[i].name} | `;
+      for (const n of filtered) {
+        n.name = prefix + n.name;
+      }
+      allNodes.push(...filtered);
     }
   }
 

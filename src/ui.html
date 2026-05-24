@@ -5,10 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>🚀 Clash Sub Hub</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/javascript/javascript.min.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
   .toast { position: fixed; top: 20px; right: 20px; z-index: 999; transition: opacity 0.3s; }
+  .CodeMirror { height: 600px; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 13px; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -168,12 +173,14 @@ uuid: xxx
     <div class="bg-white rounded-lg shadow p-4">
       <div class="flex items-center justify-between mb-3">
         <h3 class="font-semibold">全局扩展脚本 (JavaScript)</h3>
-        <div class="flex gap-2">
+        <div class="flex gap-2 items-center">
           <button onclick="copyScriptUrl()" class="text-sm text-blue-500 hover:text-blue-700">复制脚本链接</button>
-          <button onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+          <button id="btn-edit-script" onclick="toggleEditScript()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">编辑</button>
+          <button id="btn-save-script" onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 hidden">保存</button>
+          <button id="btn-cancel-script" onclick="cancelEditScript()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 hidden">取消</button>
         </div>
       </div>
-      <textarea id="script-editor" rows="20" class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
+      <div id="script-editor-wrap"></div>
     </div>
   </div>
 </div>
@@ -444,15 +451,60 @@ async function delNode(name) {
   loadNodes();
 }
 
-// ==================== Script ====================
+// ==================== Script (CodeMirror) ====================
+let _cm = null;
+let _scriptBackup = '';
+
+function initCodeMirror() {
+  if (_cm) return;
+  _cm = CodeMirror(document.getElementById('script-editor-wrap'), {
+    mode: 'javascript',
+    theme: 'dracula',
+    lineNumbers: true,
+    lineWrapping: false,
+    readOnly: true,
+    tabSize: 2,
+    indentWithTabs: false,
+    scrollbarStyle: 'native',
+  });
+}
+
 async function loadScript() {
+  initCodeMirror();
   const { data } = await api('/api/script');
-  document.getElementById('script-editor').value = data?.script || '';
+  const content = data?.script || '';
+  _cm.setValue(content);
+  _scriptBackup = content;
+  _cm.setOption('readOnly', true);
+  document.getElementById('btn-edit-script').classList.remove('hidden');
+  document.getElementById('btn-save-script').classList.add('hidden');
+  document.getElementById('btn-cancel-script').classList.add('hidden');
+}
+
+function toggleEditScript() {
+  _scriptBackup = _cm.getValue();
+  _cm.setOption('readOnly', false);
+  _cm.focus();
+  document.getElementById('btn-edit-script').classList.add('hidden');
+  document.getElementById('btn-save-script').classList.remove('hidden');
+  document.getElementById('btn-cancel-script').classList.remove('hidden');
+}
+
+function cancelEditScript() {
+  _cm.setValue(_scriptBackup);
+  _cm.setOption('readOnly', true);
+  document.getElementById('btn-edit-script').classList.remove('hidden');
+  document.getElementById('btn-save-script').classList.add('hidden');
+  document.getElementById('btn-cancel-script').classList.add('hidden');
 }
 
 async function saveScript() {
-  const script = document.getElementById('script-editor').value;
+  const script = _cm.getValue();
   await api('/api/script', { method: 'POST', body: { script } });
+  _cm.setOption('readOnly', true);
+  document.getElementById('btn-edit-script').classList.remove('hidden');
+  document.getElementById('btn-save-script').classList.add('hidden');
+  document.getElementById('btn-cancel-script').classList.add('hidden');
   toast('脚本已保存');
 }
 
@@ -490,7 +542,7 @@ async function importScriptFile(input) {
   const text = await file.text();
   await api('/api/script', { method: 'POST', body: { script: text } });
   toast('脚本已导入');
-  loadScript();
+  await loadScript();
   input.value = '';
 }
 
