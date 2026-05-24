@@ -6,8 +6,9 @@ import {
   listUsers, createUser, updateUser, deleteUser,
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
   testUpstream, testExistingUpstream, refreshAll,
-  listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode,
+  listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode, testNewNode, testExistingNode,
   getScript, updateScript,
+  getScriptUrl, setScriptUrl, syncScriptFromUrl,
   importMerge, exportMerge,
 } from './admin';
 import UI_HTML from './ui.html';
@@ -100,6 +101,12 @@ async function routeApi(
   // 自建节点
   if (path === '/api/custom-nodes' && method === 'GET') return listCustomNodes(env);
   if (path === '/api/custom-nodes' && method === 'POST') return createCustomNode(request, env);
+  if (path === '/api/custom-nodes/test' && method === 'POST') return testNewNode(request);
+
+  const nodeTestMatch = path.match(/^\/api\/custom-nodes\/([^/]+)\/test$/);
+  if (nodeTestMatch && method === 'POST') {
+    return testExistingNode(decodeURIComponent(nodeTestMatch[1]), env);
+  }
 
   const nodeMatch = path.match(/^\/api\/custom-nodes\/([^/]+)$/);
   if (nodeMatch) {
@@ -111,6 +118,11 @@ async function routeApi(
   // 脚本
   if (path === '/api/script' && method === 'GET') return getScript(env);
   if (path === '/api/script' && method === 'POST') return updateScript(request, env);
+
+  // 外部脚本 URL
+  if (path === '/api/script-url' && method === 'GET') return getScriptUrl(env);
+  if (path === '/api/script-url' && method === 'POST') return setScriptUrl(request, env);
+  if (path === '/api/script-url/sync' && method === 'POST') return syncScriptFromUrl(env);
 
   // 导入导出
   if (path === '/api/import/merge' && method === 'POST') return importMerge(request, env);

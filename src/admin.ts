@@ -1,6 +1,7 @@
 import { Env, User, Upstream, ProxyNode } from './types';
 import { testUpstreamUrl } from './cron';
 import { handleScheduled } from './cron';
+import { connect } from 'cloudflare:sockets';
 import yaml from 'js-yaml';
 
 // ==================== 用户管理 ====================
@@ -229,6 +230,56 @@ export async function deleteCustomNode(name: string, env: Env): Promise<Response
   return Response.json({ ok: true });
 }
 
+// ==================== 自建节点测试 ====================
+
+async function testNodeReachability(server: string, port: number): Promise<{ ok: boolean; latency?: number; error?: string }> {
+  const start = Date.now();
+  try {
+    const socket = connect({ hostname: server, port });
+    const writer = socket.writable.getWriter();
+    await Promise.race([
+      writer.ready,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('连接超时')), 5000)),
+    ]);
+    const latency = Date.now() - start;
+    writer.releaseLock();
+    await socket.close();
+    return { ok: true, latency };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+export async function testNewNode(request: Request): Promise<Response> {
+  const body = (await request.json()) as { yaml: string };
+  if (!body.yaml) return Response.json({ error: 'yaml 必填' }, { status: 400 });
+
+  let node: ProxyNode;
+  try {
+    node = yaml.load(body.yaml) as ProxyNode;
+    if (!node.server || !node.port) {
+      return Response.json({ error: '节点缺少 server 或 port' }, { status: 400 });
+    }
+  } catch {
+    return Response.json({ error: 'YAML 解析失败' }, { status: 400 });
+  }
+
+  const result = await testNodeReachability(node.server, node.port);
+  return Response.json(result);
+}
+
+export async function testExistingNode(name: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('custom-nodes');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const nodes: ProxyNode[] = JSON.parse(raw);
+  const node = nodes.find((n) => n.name === name);
+  if (!node) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const result = await testNodeReachability(node.server, node.port);
+  return Response.json(result);
+}
+
 // ==================== 脚本管理 ====================
 
 export async function getScript(env: Env): Promise<Response> {
@@ -240,6 +291,34 @@ export async function updateScript(request: Request, env: Env): Promise<Response
   const body = (await request.json()) as { script: string };
   await env.KV.put('script', body.script || '');
   return Response.json({ ok: true });
+}
+
+// ==================== 外部脚本 URL ====================
+
+export async function getScriptUrl(env: Env): Promise<Response> {
+  const url = await env.KV.get('script-url');
+  return Response.json({ url: url || '' });
+}
+
+export async function setScriptUrl(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { url: string };
+  await env.KV.put('script-url', body.url || '');
+  return Response.json({ ok: true });
+}
+
+export async function syncScriptFromUrl(env: Env): Promise<Response> {
+  const url = await env.KV.get('script-url');
+  if (!url) return Response.json({ error: '未设置外部脚本 URL' }, { status: 400 });
+
+  try {
+    const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!resp.ok) return Response.json({ error: `HTTP ${resp.status}` }, { status: 502 });
+    const text = await resp.text();
+    await env.KV.put('script', text);
+    return Response.json({ ok: true });
+  } catch (e) {
+    return Response.json({ error: (e as Error).message }, { status: 502 });
+  }
 }
 
 // ==================== 导入导出 ====================
