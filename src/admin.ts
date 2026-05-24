@@ -1,0 +1,243 @@
+import { Env, User, Upstream, ProxyNode } from './types';
+import { testUpstreamUrl } from './cron';
+import { handleScheduled } from './cron';
+import yaml from 'js-yaml';
+
+// ==================== 用户管理 ====================
+
+export async function listUsers(env: Env): Promise<Response> {
+  const raw = await env.KV.get('users');
+  return Response.json(raw ? JSON.parse(raw) : []);
+}
+
+export async function createUser(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { token: string; name: string };
+  if (!body.token || !body.name) {
+    return Response.json({ error: 'token 和 name 必填' }, { status: 400 });
+  }
+
+  const raw = await env.KV.get('users');
+  const users: User[] = raw ? JSON.parse(raw) : [];
+
+  if (users.some((u) => u.token === body.token)) {
+    return Response.json({ error: 'token 已存在' }, { status: 409 });
+  }
+
+  users.push({
+    token: body.token,
+    name: body.name,
+    enabled: true,
+    createdAt: new Date().toISOString(),
+  });
+
+  await env.KV.put('users', JSON.stringify(users));
+  return Response.json({ ok: true });
+}
+
+export async function updateUser(token: string, request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { enabled?: boolean; name?: string };
+  const raw = await env.KV.get('users');
+  if (!raw) return Response.json({ error: '用户不存在' }, { status: 404 });
+
+  const users: User[] = JSON.parse(raw);
+  const user = users.find((u) => u.token === token);
+  if (!user) return Response.json({ error: '用户不存在' }, { status: 404 });
+
+  if (body.enabled !== undefined) user.enabled = body.enabled;
+  if (body.name !== undefined) user.name = body.name;
+
+  await env.KV.put('users', JSON.stringify(users));
+  return Response.json({ ok: true });
+}
+
+export async function deleteUser(token: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('users');
+  if (!raw) return Response.json({ error: '用户不存在' }, { status: 404 });
+
+  const users: User[] = JSON.parse(raw);
+  const filtered = users.filter((u) => u.token !== token);
+
+  if (filtered.length === users.length) {
+    return Response.json({ error: '用户不存在' }, { status: 404 });
+  }
+
+  await env.KV.put('users', JSON.stringify(filtered));
+  return Response.json({ ok: true });
+}
+
+// ==================== 上游订阅管理 ====================
+
+export async function listUpstreams(env: Env): Promise<Response> {
+  const raw = await env.KV.get('upstreams');
+  return Response.json(raw ? JSON.parse(raw) : []);
+}
+
+export async function createUpstream(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { name: string; url: string; userAgent?: string };
+  if (!body.name || !body.url) {
+    return Response.json({ error: 'name 和 url 必填' }, { status: 400 });
+  }
+
+  const raw = await env.KV.get('upstreams');
+  const upstreams: Upstream[] = raw ? JSON.parse(raw) : [];
+
+  if (upstreams.some((u) => u.name === body.name)) {
+    return Response.json({ error: '名称已存在' }, { status: 409 });
+  }
+
+  upstreams.push({
+    name: body.name,
+    url: body.url,
+    userAgent: body.userAgent || 'clash.meta',
+    lastUpdate: null,
+    nodeCount: 0,
+    lastError: null,
+  });
+
+  await env.KV.put('upstreams', JSON.stringify(upstreams));
+  return Response.json({ ok: true });
+}
+
+export async function updateUpstream(
+  name: string,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = (await request.json()) as { url?: string; userAgent?: string };
+  const raw = await env.KV.get('upstreams');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const upstreams: Upstream[] = JSON.parse(raw);
+  const upstream = upstreams.find((u) => u.name === name);
+  if (!upstream) return Response.json({ error: '不存在' }, { status: 404 });
+
+  if (body.url !== undefined) upstream.url = body.url;
+  if (body.userAgent !== undefined) upstream.userAgent = body.userAgent;
+
+  await env.KV.put('upstreams', JSON.stringify(upstreams));
+  return Response.json({ ok: true });
+}
+
+export async function deleteUpstream(name: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('upstreams');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const upstreams: Upstream[] = JSON.parse(raw);
+  const filtered = upstreams.filter((u) => u.name !== name);
+
+  await env.KV.put('upstreams', JSON.stringify(filtered));
+  await env.KV.delete(`cache:${name}`);
+  return Response.json({ ok: true });
+}
+
+export async function testUpstream(request: Request): Promise<Response> {
+  const body = (await request.json()) as { url: string; userAgent?: string };
+  if (!body.url) return Response.json({ error: 'url 必填' }, { status: 400 });
+
+  const result = await testUpstreamUrl(body.url, body.userAgent || 'clash.meta');
+  return Response.json(result);
+}
+
+export async function testExistingUpstream(name: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('upstreams');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const upstreams: Upstream[] = JSON.parse(raw);
+  const upstream = upstreams.find((u) => u.name === name);
+  if (!upstream) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const result = await testUpstreamUrl(upstream.url, upstream.userAgent);
+  return Response.json(result);
+}
+
+export async function refreshAll(env: Env): Promise<Response> {
+  await handleScheduled(env);
+  return Response.json({ ok: true });
+}
+
+// ==================== 自建节点管理 ====================
+
+export async function listCustomNodes(env: Env): Promise<Response> {
+  const raw = await env.KV.get('custom-nodes');
+  return Response.json(raw ? JSON.parse(raw) : []);
+}
+
+export async function createCustomNode(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { yaml: string };
+  if (!body.yaml) return Response.json({ error: 'yaml 必填' }, { status: 400 });
+
+  let node: ProxyNode;
+  try {
+    node = yaml.load(body.yaml) as ProxyNode;
+    if (!node.name || !node.type || !node.server || !node.port) {
+      return Response.json({ error: '节点缺少必要字段 (name, type, server, port)' }, { status: 400 });
+    }
+  } catch {
+    return Response.json({ error: 'YAML 解析失败' }, { status: 400 });
+  }
+
+  const raw = await env.KV.get('custom-nodes');
+  const nodes: ProxyNode[] = raw ? JSON.parse(raw) : [];
+
+  if (nodes.some((n) => n.name === node.name)) {
+    return Response.json({ error: '节点名已存在' }, { status: 409 });
+  }
+
+  nodes.push(node);
+  await env.KV.put('custom-nodes', JSON.stringify(nodes));
+  return Response.json({ ok: true });
+}
+
+export async function updateCustomNode(
+  name: string,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  const body = (await request.json()) as { yaml: string };
+  if (!body.yaml) return Response.json({ error: 'yaml 必填' }, { status: 400 });
+
+  let node: ProxyNode;
+  try {
+    node = yaml.load(body.yaml) as ProxyNode;
+    if (!node.name || !node.type || !node.server || !node.port) {
+      return Response.json({ error: '节点缺少必要字段' }, { status: 400 });
+    }
+  } catch {
+    return Response.json({ error: 'YAML 解析失败' }, { status: 400 });
+  }
+
+  const raw = await env.KV.get('custom-nodes');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const nodes: ProxyNode[] = JSON.parse(raw);
+  const idx = nodes.findIndex((n) => n.name === name);
+  if (idx === -1) return Response.json({ error: '不存在' }, { status: 404 });
+
+  nodes[idx] = node;
+  await env.KV.put('custom-nodes', JSON.stringify(nodes));
+  return Response.json({ ok: true });
+}
+
+export async function deleteCustomNode(name: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('custom-nodes');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const nodes: ProxyNode[] = JSON.parse(raw);
+  const filtered = nodes.filter((n) => n.name !== name);
+
+  await env.KV.put('custom-nodes', JSON.stringify(filtered));
+  return Response.json({ ok: true });
+}
+
+// ==================== 脚本管理 ====================
+
+export async function getScript(env: Env): Promise<Response> {
+  const script = await env.KV.get('script');
+  return Response.json({ script: script || '' });
+}
+
+export async function updateScript(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { script: string };
+  await env.KV.put('script', body.script || '');
+  return Response.json({ ok: true });
+}

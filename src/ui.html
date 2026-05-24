@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clash Sub Hub - Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+  .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
+  .toast { position: fixed; top: 20px; right: 20px; z-index: 999; transition: opacity 0.3s; }
+</style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+
+<!-- Toast -->
+<div id="toast" class="toast hidden bg-green-500 text-white px-4 py-2 rounded shadow-lg"></div>
+
+<!-- Login -->
+<div id="login-page" class="flex items-center justify-center min-h-screen">
+  <div class="bg-white p-8 rounded-lg shadow-md w-80">
+    <h1 class="text-xl font-bold mb-6 text-center">Clash Sub Hub</h1>
+    <input id="password-input" type="password" placeholder="管理密码"
+      class="w-full px-3 py-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
+      onkeydown="if(event.key==='Enter')login()">
+    <button onclick="login()" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">登录</button>
+  </div>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard" class="hidden max-w-5xl mx-auto p-4">
+  <div class="flex items-center justify-between mb-6">
+    <h1 class="text-xl font-bold">Clash Sub Hub</h1>
+    <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500">退出</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="flex border-b mb-6 gap-6">
+    <button class="tab-btn pb-2 tab-active" data-tab="users">用户管理</button>
+    <button class="tab-btn pb-2" data-tab="upstreams">上游订阅</button>
+    <button class="tab-btn pb-2" data-tab="nodes">自建节点</button>
+    <button class="tab-btn pb-2" data-tab="script">扩展脚本</button>
+  </div>
+
+  <!-- ==================== 用户管理 Tab ==================== -->
+  <div id="tab-users" class="tab-panel">
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <h3 class="font-semibold mb-3">添加用户</h3>
+      <div class="flex gap-2">
+        <input id="new-user-token" placeholder="Token (自定义)" class="flex-1 px-3 py-2 border rounded text-sm">
+        <input id="new-user-name" placeholder="备注名" class="flex-1 px-3 py-2 border rounded text-sm">
+        <button onclick="addUser()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">添加</button>
+      </div>
+    </div>
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="text-left px-4 py-3">Token</th>
+            <th class="text-left px-4 py-3">备注</th>
+            <th class="text-left px-4 py-3">状态</th>
+            <th class="text-left px-4 py-3">创建时间</th>
+            <th class="text-left px-4 py-3">操作</th>
+          </tr>
+        </thead>
+        <tbody id="users-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== 上游订阅 Tab ==================== -->
+  <div id="tab-upstreams" class="tab-panel hidden">
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <h3 class="font-semibold mb-3">添加上游订阅</h3>
+      <div class="flex gap-2 mb-2">
+        <input id="new-up-name" placeholder="名称" class="w-32 px-3 py-2 border rounded text-sm">
+        <input id="new-up-url" placeholder="订阅 URL" class="flex-1 px-3 py-2 border rounded text-sm">
+        <input id="new-up-ua" placeholder="UA (默认 clash.meta)" class="w-40 px-3 py-2 border rounded text-sm">
+      </div>
+      <div class="flex gap-2">
+        <button onclick="testNewUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
+        <button onclick="addUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">导入</button>
+        <button onclick="refreshAllUpstreams()" class="ml-auto bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">刷新全部</button>
+      </div>
+      <div id="test-result" class="mt-2 text-sm hidden"></div>
+    </div>
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="text-left px-4 py-3">名称</th>
+            <th class="text-left px-4 py-3">节点数</th>
+            <th class="text-left px-4 py-3">最后更新</th>
+            <th class="text-left px-4 py-3">状态</th>
+            <th class="text-left px-4 py-3">操作</th>
+          </tr>
+        </thead>
+        <tbody id="upstreams-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== 自建节点 Tab ==================== -->
+  <div id="tab-nodes" class="tab-panel hidden">
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <h3 class="font-semibold mb-3">添加自建节点 (YAML 格式)</h3>
+      <textarea id="new-node-yaml" rows="8" placeholder="name: 自建-Reality
+type: vless
+server: 1.2.3.4
+port: 443
+uuid: xxx
+..." class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
+      <button onclick="addNode()" class="mt-2 bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">添加</button>
+    </div>
+    <div class="bg-white rounded-lg shadow overflow-hidden">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="text-left px-4 py-3">名称</th>
+            <th class="text-left px-4 py-3">类型</th>
+            <th class="text-left px-4 py-3">服务器</th>
+            <th class="text-left px-4 py-3">端口</th>
+            <th class="text-left px-4 py-3">操作</th>
+          </tr>
+        </thead>
+        <tbody id="nodes-table"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ==================== 扩展脚本 Tab ==================== -->
+  <div id="tab-script" class="tab-panel hidden">
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">全局扩展脚本 (JavaScript)</h3>
+        <div class="flex gap-2">
+          <button onclick="copyScriptUrl()" class="text-sm text-blue-500 hover:text-blue-700">复制脚本链接</button>
+          <button onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+        </div>
+      </div>
+      <textarea id="script-editor" rows="20" class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = location.origin;
+let KEY = localStorage.getItem('admin_key') || '';
+
+// ==================== Auth ====================
+function login() {
+  KEY = document.getElementById('password-input').value;
+  api('/api/users').then(r => {
+    if (r.ok) {
+      localStorage.setItem('admin_key', KEY);
+      showDashboard();
+    } else {
+      alert('密码错误');
+    }
+  });
+}
+
+function logout() {
+  KEY = '';
+  localStorage.removeItem('admin_key');
+  document.getElementById('dashboard').classList.add('hidden');
+  document.getElementById('login-page').classList.remove('hidden');
+}
+
+function showDashboard() {
+  document.getElementById('login-page').classList.add('hidden');
+  document.getElementById('dashboard').classList.remove('hidden');
+  loadUsers();
+  loadUpstreams();
+  loadNodes();
+  loadScript();
+}
+
+// ==================== API Helper ====================
+async function api(path, opts = {}) {
+  const headers = { 'Authorization': `Bearer ${KEY}`, ...opts.headers };
+  if (opts.body && typeof opts.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(opts.body);
+  }
+  const r = await fetch(BASE + path, { ...opts, headers });
+  return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
+}
+
+function toast(msg, ok = true) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast px-4 py-2 rounded shadow-lg text-white ${ok ? 'bg-green-500' : 'bg-red-500'}`;
+  setTimeout(() => el.classList.add('hidden'), 2500);
+}
+
+// ==================== Tabs ====================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    btn.classList.add('tab-active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+  });
+});
+
+// ==================== Users ====================
+async function loadUsers() {
+  const { data } = await api('/api/users');
+  const tbody = document.getElementById('users-table');
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无用户</td></tr>'; return; }
+  tbody.innerHTML = data.map(u => `
+    <tr class="border-t">
+      <td class="px-4 py-3 font-mono">${esc(u.token)}</td>
+      <td class="px-4 py-3">${esc(u.name)}</td>
+      <td class="px-4 py-3">${u.enabled
+        ? '<span class="text-green-600">启用</span>'
+        : '<span class="text-red-500">禁用</span>'}</td>
+      <td class="px-4 py-3 text-gray-500">${new Date(u.createdAt).toLocaleDateString()}</td>
+      <td class="px-4 py-3 flex gap-2">
+        <button onclick="copySubUrl('${esc(u.token)}')" class="text-blue-500 hover:underline">复制链接</button>
+        <button onclick="toggleUser('${esc(u.token)}',${!u.enabled})" class="text-yellow-600 hover:underline">${u.enabled ? '禁用' : '启用'}</button>
+        <button onclick="delUser('${esc(u.token)}')" class="text-red-500 hover:underline">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function addUser() {
+  const token = document.getElementById('new-user-token').value.trim();
+  const name = document.getElementById('new-user-name').value.trim();
+  if (!token || !name) return toast('请填写 Token 和备注', false);
+  const { ok, data } = await api('/api/users', { method: 'POST', body: { token, name } });
+  toast(ok ? '添加成功' : (data?.error || '添加失败'), ok);
+  if (ok) { document.getElementById('new-user-token').value = ''; document.getElementById('new-user-name').value = ''; loadUsers(); }
+}
+
+async function toggleUser(token, enabled) {
+  await api(`/api/users/${encodeURIComponent(token)}`, { method: 'PUT', body: { enabled } });
+  loadUsers();
+}
+
+async function delUser(token) {
+  if (!confirm(`确认删除用户 ${token}？`)) return;
+  await api(`/api/users/${encodeURIComponent(token)}`, { method: 'DELETE' });
+  toast('已删除');
+  loadUsers();
+}
+
+function copySubUrl(token) {
+  const url = `${BASE}/sub/${token}`;
+  navigator.clipboard.writeText(url);
+  toast('订阅链接已复制');
+}
+
+// ==================== Upstreams ====================
+async function loadUpstreams() {
+  const { data } = await api('/api/upstreams');
+  const tbody = document.getElementById('upstreams-table');
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
+  tbody.innerHTML = data.map(u => `
+    <tr class="border-t">
+      <td class="px-4 py-3 font-semibold">${esc(u.name)}</td>
+      <td class="px-4 py-3">${u.nodeCount}</td>
+      <td class="px-4 py-3 text-gray-500">${u.lastUpdate ? new Date(u.lastUpdate).toLocaleString() : '-'}</td>
+      <td class="px-4 py-3">${u.lastError
+        ? `<span class="text-red-500">${esc(u.lastError)}</span>`
+        : (u.lastUpdate ? '<span class="text-green-600">正常</span>' : '<span class="text-gray-400">未同步</span>')}</td>
+      <td class="px-4 py-3 flex gap-2">
+        <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline">测试</button>
+        <button onclick="delUpstream('${esc(u.name)}')" class="text-red-500 hover:underline">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function testNewUpstream() {
+  const url = document.getElementById('new-up-url').value.trim();
+  const ua = document.getElementById('new-up-ua').value.trim();
+  if (!url) return toast('请填写 URL', false);
+  const el = document.getElementById('test-result');
+  el.classList.remove('hidden');
+  el.innerHTML = '<span class="text-gray-500">测试中...</span>';
+  const { data } = await api('/api/upstreams/test', { method: 'POST', body: { url, userAgent: ua || 'clash.meta' } });
+  if (data?.ok) {
+    el.innerHTML = `<span class="text-green-600">成功! 解析到 ${data.nodeCount} 个节点</span><br><span class="text-gray-500">预览: ${data.preview.join(', ')}</span>`;
+  } else {
+    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+  }
+}
+
+async function addUpstream() {
+  const name = document.getElementById('new-up-name').value.trim();
+  const url = document.getElementById('new-up-url').value.trim();
+  const ua = document.getElementById('new-up-ua').value.trim();
+  if (!name || !url) return toast('请填写名称和 URL', false);
+  const { ok, data } = await api('/api/upstreams', { method: 'POST', body: { name, url, userAgent: ua || 'clash.meta' } });
+  toast(ok ? '导入成功' : (data?.error || '导入失败'), ok);
+  if (ok) {
+    document.getElementById('new-up-name').value = '';
+    document.getElementById('new-up-url').value = '';
+    document.getElementById('new-up-ua').value = '';
+    document.getElementById('test-result').classList.add('hidden');
+    loadUpstreams();
+  }
+}
+
+async function testExisting(name) {
+  toast('测试中...');
+  const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/test`, { method: 'POST' });
+  toast(data?.ok ? `正常! ${data.nodeCount} 个节点` : `失败: ${data?.error}`, data?.ok);
+}
+
+async function delUpstream(name) {
+  if (!confirm(`确认删除订阅 ${name}？`)) return;
+  await api(`/api/upstreams/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  toast('已删除');
+  loadUpstreams();
+}
+
+async function refreshAllUpstreams() {
+  toast('刷新中...');
+  await api('/api/refresh', { method: 'POST' });
+  toast('刷新完成');
+  loadUpstreams();
+}
+
+// ==================== Custom Nodes ====================
+async function loadNodes() {
+  const { data } = await api('/api/custom-nodes');
+  const tbody = document.getElementById('nodes-table');
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
+  tbody.innerHTML = data.map(n => `
+    <tr class="border-t">
+      <td class="px-4 py-3 font-semibold">${esc(n.name)}</td>
+      <td class="px-4 py-3">${esc(n.type)}</td>
+      <td class="px-4 py-3 font-mono text-xs">${esc(n.server)}</td>
+      <td class="px-4 py-3">${n.port}</td>
+      <td class="px-4 py-3">
+        <button onclick="delNode('${esc(n.name)}')" class="text-red-500 hover:underline">删除</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+async function addNode() {
+  const yamlText = document.getElementById('new-node-yaml').value.trim();
+  if (!yamlText) return toast('请填写节点配置', false);
+  const { ok, data } = await api('/api/custom-nodes', { method: 'POST', body: { yaml: yamlText } });
+  toast(ok ? '添加成功' : (data?.error || '添加失败'), ok);
+  if (ok) { document.getElementById('new-node-yaml').value = ''; loadNodes(); }
+}
+
+async function delNode(name) {
+  if (!confirm(`确认删除节点 ${name}？`)) return;
+  await api(`/api/custom-nodes/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  toast('已删除');
+  loadNodes();
+}
+
+// ==================== Script ====================
+async function loadScript() {
+  const { data } = await api('/api/script');
+  document.getElementById('script-editor').value = data?.script || '';
+}
+
+async function saveScript() {
+  const script = document.getElementById('script-editor').value;
+  await api('/api/script', { method: 'POST', body: { script } });
+  toast('脚本已保存');
+}
+
+function copyScriptUrl() {
+  navigator.clipboard.writeText(`${BASE}/script.js`);
+  toast('脚本链接已复制');
+}
+
+// ==================== Utils ====================
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+// Auto login
+if (KEY) {
+  api('/api/users').then(r => { if (r.ok) showDashboard(); });
+}
+</script>
+</body>
+</html>
