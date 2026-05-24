@@ -59,19 +59,7 @@
 <div id="dashboard" class="hidden max-w-5xl mx-auto p-4">
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-xl font-bold">🚀 Clash Sub Hub</h1>
-    <div class="flex gap-2 items-center">
-      <label class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-200">
-        导入 Merge
-        <input type="file" accept=".yaml,.yml" class="hidden" onchange="importMergeFile(this)">
-      </label>
-      <button onclick="exportMergeFile()" class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-200">导出 Merge</button>
-      <label class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm cursor-pointer hover:bg-gray-200">
-        导入脚本
-        <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
-      </label>
-      <button onclick="exportScriptFile()" class="bg-gray-100 text-gray-700 px-3 py-1.5 rounded text-sm hover:bg-gray-200">导出脚本</button>
-      <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500 ml-2">退出</button>
-    </div>
+    <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500">退出</button>
   </div>
 
   <!-- Tabs -->
@@ -120,7 +108,14 @@
       <div class="flex gap-2">
         <button onclick="testNewUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
         <button onclick="addUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">导入</button>
-        <button onclick="refreshAllUpstreams()" class="ml-auto bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">刷新全部</button>
+        <div class="ml-auto flex gap-2">
+          <label class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200">
+            导入 Merge
+            <input type="file" accept=".yaml,.yml" class="hidden" onchange="importMergeFile(this)">
+          </label>
+          <button onclick="exportMergeFile()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出 Merge</button>
+          <button onclick="refreshAllUpstreams()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">刷新全部</button>
+        </div>
       </div>
       <div id="test-result" class="mt-2 text-sm hidden"></div>
     </div>
@@ -175,11 +170,22 @@ uuid: xxx
         <h3 class="font-semibold">全局扩展脚本 (JavaScript)</h3>
         <div class="flex gap-2 items-center">
           <button onclick="copyScriptUrl()" class="text-sm text-blue-500 hover:text-blue-700">复制脚本链接</button>
+          <label class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200">
+            导入脚本
+            <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
+          </label>
+          <button onclick="exportScriptFile()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出脚本</button>
           <button id="btn-edit-script" onclick="toggleEditScript()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">编辑</button>
           <button id="btn-save-script" onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 hidden">保存</button>
           <button id="btn-cancel-script" onclick="cancelEditScript()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 hidden">取消</button>
         </div>
       </div>
+      <div class="flex gap-2 mb-3 items-center">
+        <input id="script-url" placeholder="外部脚本 URL (如 GitHub raw 链接)" class="flex-1 px-3 py-2 border rounded text-sm font-mono">
+        <button onclick="syncScriptFromUrl()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 whitespace-nowrap">同步</button>
+        <button onclick="saveScriptUrl()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 whitespace-nowrap">保存链接</button>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">设置外部链接后，Cron 每小时自动同步。也可手动点「同步」立即拉取。</p>
       <div id="script-editor-wrap"></div>
     </div>
   </div>
@@ -216,6 +222,7 @@ function showDashboard() {
   loadUpstreams();
   loadNodes();
   loadScript();
+  loadScriptUrl();
 }
 
 // ==================== API Helper ====================
@@ -511,6 +518,26 @@ async function saveScript() {
 function copyScriptUrl() {
   navigator.clipboard.writeText(`${BASE}/script.js`);
   toast('脚本链接已复制');
+}
+
+async function loadScriptUrl() {
+  const { data } = await api('/api/script-url');
+  document.getElementById('script-url').value = data?.url || '';
+}
+
+async function saveScriptUrl() {
+  const url = document.getElementById('script-url').value.trim();
+  await api('/api/script-url', { method: 'POST', body: { url } });
+  toast(url ? '外部链接已保存，Cron 将自动同步' : '外部链接已清除');
+}
+
+async function syncScriptFromUrl() {
+  const url = document.getElementById('script-url').value.trim();
+  if (!url) return toast('请填写 URL', false);
+  toast('同步中...');
+  const { ok, data } = await api('/api/script-url/sync', { method: 'POST' });
+  if (ok) { toast('同步成功'); await loadScript(); }
+  else toast(data?.error || '同步失败', false);
 }
 
 // ==================== Import/Export ====================
