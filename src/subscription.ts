@@ -127,7 +127,7 @@ async function buildFullConfig(
       path: `./providers/${p.name}.yaml`,
       'health-check': {
         enable: true,
-        url: 'http://www.gstatic.com/generate_204',
+        url: 'http://connectivitycheck.gstatic.com/generate_204',
         interval: 300,
       },
       header: { 'User-Agent': [p.userAgent] },

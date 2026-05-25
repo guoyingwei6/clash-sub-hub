@@ -2,6 +2,7 @@ import { Env } from './types';
 import { checkAdmin, unauthorized } from './auth';
 import { handleSubscription } from './subscription';
 import { handleScheduled } from './cron';
+import { builtinScriptContent } from './generated/script-content';
 import {
   listUsers, createUser, updateUser, deleteUser,
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
@@ -33,10 +34,10 @@ export default {
       return handleSubscription(subMatch[1], format, mode, env);
     }
 
-    // 公开接口：全局扩展脚本
+    // 公开接口：全局扩展脚本（KV override 优先，否则返回内置版本）
     if (path === '/script.js') {
-      const script = await env.KV.get('script-base') || await env.KV.get('script') || '';
-      return new Response(script || '// 暂无脚本', {
+      const script = await env.KV.get('script-base') || await env.KV.get('script') || builtinScriptContent;
+      return new Response(script, {
         headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
       });
     }

@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "generate": "node scripts/generate-script-content.js",
+    "predev": "node scripts/generate-script-content.js",
+    "predeploy": "node scripts/generate-script-content.js",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },

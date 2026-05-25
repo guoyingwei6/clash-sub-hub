@@ -262,7 +262,7 @@ function main(config) {
   const groupBase = {
     interval: 300,
     timeout: 3000,
-    url: "https://www.gstatic.com/generate_204",
+    url: "https://connectivitycheck.gstatic.com/generate_204",
     lazy: true,
     "max-failed-times": 3,
     hidden: false
@@ -279,7 +279,7 @@ function main(config) {
       ...(hasTUIC ? ["🛠 自建-TUIC"] : []),
       "⚡️ 自动选择"
     ],
-    url: "https://www.gstatic.com/generate_204",
+    url: "https://connectivitycheck.gstatic.com/generate_204",
     interval: 300,
     lazy: true,
     icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/guard.svg"
