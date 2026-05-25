@@ -250,13 +250,11 @@ async function testNodeReachability(server: string, port: number): Promise<{ ok:
   const start = Date.now();
   try {
     const socket = connect({ hostname: server, port });
-    const writer = socket.writable.getWriter();
     await Promise.race([
-      writer.ready,
+      socket.opened,
       new Promise<never>((_, reject) => setTimeout(() => reject(new Error('连接超时')), 5000)),
     ]);
     const latency = Date.now() - start;
-    writer.releaseLock();
     await socket.close();
     return { ok: true, latency };
   } catch (e) {
