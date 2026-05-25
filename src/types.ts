@@ -10,6 +10,7 @@ export interface User {
   createdAt: string;
   allowedUpstreams?: string[] | null;   // null/undefined = 全部, [] = 无
   allowedCustomNodes?: string[] | null; // null/undefined = 全部, [] = 无
+  filterNodes?: boolean | null;         // null/undefined = 跟随全局, true/false = 强制
 }
 
 export interface Upstream {
@@ -26,6 +27,7 @@ export interface Upstream {
 export interface GlobalSettings {
   defaultUA: string;
   fetchTimeout: number;     // 秒
+  filterEnabled: boolean;   // 全局过滤开关
 }
 
 export interface ProxyNode {

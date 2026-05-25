@@ -1,6 +1,5 @@
 import { Env, User, Upstream, ProxyNode, GlobalSettings } from './types';
-import { testUpstreamUrl } from './cron';
-import { handleScheduled } from './cron';
+import { testUpstreamUrl, handleScheduled, fetchUpstream } from './cron';
 import { getGlobalSettings } from './settings';
 import { parseClashYaml, filterNodes } from './converter';
 import { connect } from 'cloudflare:sockets';
@@ -17,6 +16,7 @@ export async function updateSettings(request: Request, env: Env): Promise<Respon
   const current = await getGlobalSettings(env);
   if (body.defaultUA !== undefined) current.defaultUA = body.defaultUA;
   if (body.fetchTimeout !== undefined) current.fetchTimeout = body.fetchTimeout;
+  if (body.filterEnabled !== undefined) current.filterEnabled = body.filterEnabled;
   await env.KV.put('global-settings', JSON.stringify(current));
   return Response.json({ ok: true });
 }
@@ -58,6 +58,7 @@ export async function updateUser(token: string, request: Request, env: Env): Pro
     name?: string;
     allowedUpstreams?: string[] | null;
     allowedCustomNodes?: string[] | null;
+    filterNodes?: boolean | null;
   };
   const raw = await env.KV.get('users');
   if (!raw) return Response.json({ error: '用户不存在' }, { status: 404 });
@@ -70,6 +71,7 @@ export async function updateUser(token: string, request: Request, env: Env): Pro
   if (body.name !== undefined) user.name = body.name;
   if ('allowedUpstreams' in body) user.allowedUpstreams = body.allowedUpstreams;
   if ('allowedCustomNodes' in body) user.allowedCustomNodes = body.allowedCustomNodes;
+  if ('filterNodes' in body) user.filterNodes = body.filterNodes;
 
   await env.KV.put('users', JSON.stringify(users));
   return Response.json({ ok: true });
@@ -206,6 +208,25 @@ export async function testUpstreamNode(name: string, request: Request, env: Env)
 
   const result = await testNodeReachability(node.server, node.port);
   return Response.json(result);
+}
+
+export async function refreshOne(name: string, env: Env): Promise<Response> {
+  const raw = await env.KV.get('upstreams');
+  if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const upstreams: Upstream[] = JSON.parse(raw);
+  const idx = upstreams.findIndex((u) => u.name === name);
+  if (idx === -1) return Response.json({ error: '不存在' }, { status: 404 });
+
+  const settings = await getGlobalSettings(env);
+  const updated = await fetchUpstream(upstreams[idx], settings, env);
+  upstreams[idx] = updated;
+  await env.KV.put('upstreams', JSON.stringify(upstreams));
+
+  if (updated.lastError) {
+    return Response.json({ ok: false, error: updated.lastError });
+  }
+  return Response.json({ ok: true, nodeCount: updated.nodeCount });
 }
 
 export async function refreshAll(env: Env): Promise<Response> {

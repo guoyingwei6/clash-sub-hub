@@ -6,6 +6,7 @@ import {
   deduplicateNodes,
   nodesToBase64,
 } from './converter';
+import { getGlobalSettings } from './settings';
 
 export async function handleSubscription(
   token: string,
@@ -63,6 +64,10 @@ async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
   const upstreamsRaw = await env.KV.get('upstreams');
   let upstreams: Upstream[] = upstreamsRaw ? JSON.parse(upstreamsRaw) : [];
 
+  // 判断是否过滤：用户设置优先，否则跟随全局
+  const settings = await getGlobalSettings(env);
+  const shouldFilter = user.filterNodes != null ? user.filterNodes : settings.filterEnabled;
+
   // 按用户权限过滤上游
   if (user.allowedUpstreams != null) {
     upstreams = upstreams.filter((u) => user.allowedUpstreams!.includes(u.name));
@@ -78,7 +83,7 @@ async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
     const cache = cacheResults[i];
     if (cache) {
       const nodes = parseClashYaml(cache);
-      let filtered = filterNodes(nodes);
+      let filtered = shouldFilter ? filterNodes(nodes) : nodes;
       // 排除关键词
       if (upstreams[i].exclude) {
         try {

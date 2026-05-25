@@ -149,7 +149,7 @@
 </div>
 
 <!-- Dashboard -->
-<div id="dashboard" class="hidden max-w-5xl mx-auto p-4">
+<div id="dashboard" class="hidden max-w-6xl mx-auto p-4">
   <div class="flex items-center justify-between mb-6">
     <h1 class="text-xl font-bold">Clash Sub Hub</h1>
     <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500">退出</button>
@@ -206,6 +206,16 @@
           <label class="block text-sm text-gray-600 mb-1">拉取超时（秒）</label>
           <input id="global-timeout" type="number" value="15" class="w-24 px-3 py-2 border rounded text-sm">
         </div>
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="block text-sm text-gray-600">过滤无效节点</label>
+            <span class="text-xs text-gray-400">过滤含"官网/套餐/流量/到期/剩余"等关键词的节点</span>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="global-filter" class="sr-only peer" checked>
+            <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+          </label>
+        </div>
         <button onclick="saveGlobalSettings()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600">保存设置</button>
       </div>
     </div>
@@ -260,6 +270,7 @@ uuid: xxx
       <div class="flex gap-2 mt-2">
         <button onclick="testNewNode()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
         <button onclick="addNode()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">添加</button>
+        <button onclick="testAllNodes()" class="ml-auto bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">全部测试</button>
       </div>
       <div id="node-test-result" class="mt-2 text-sm hidden"></div>
     </div>
@@ -554,13 +565,15 @@ async function loadGlobalSettings() {
   if (data) {
     renderUACheckboxes('global-ua-list', data.defaultUA);
     document.getElementById('global-timeout').value = data.fetchTimeout || 15;
+    document.getElementById('global-filter').checked = data.filterEnabled !== false;
   }
 }
 
 async function saveGlobalSettings() {
   const defaultUA = getSelectedUA('global-ua-list') || 'clash.meta';
   const fetchTimeout = parseInt(document.getElementById('global-timeout').value) || 15;
-  const { ok } = await api('/api/settings', { method: 'POST', body: { defaultUA, fetchTimeout } });
+  const filterEnabled = document.getElementById('global-filter').checked;
+  const { ok } = await api('/api/settings', { method: 'POST', body: { defaultUA, fetchTimeout, filterEnabled } });
   toast(ok ? '全局设置已保存' : '保存失败', ok);
 }
 
@@ -628,9 +641,10 @@ async function loadUpstreams() {
       <td class="px-4 py-3">${u.lastError
         ? '<span class="text-red-500">' + esc(u.lastError) + '</span>'
         : (u.lastUpdate ? '<span class="text-green-600">正常</span>' : '<span class="text-gray-400">未同步</span>')}</td>
-      <td class="px-4 py-3 flex gap-2" onclick="event.stopPropagation()">
-        <button onclick="editUpstream('${esc(u.name)}')" class="text-blue-500 hover:underline">编辑</button>
-        <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline">测试</button>
+      <td class="px-4 py-3 flex gap-3 whitespace-nowrap" onclick="event.stopPropagation()">
+        <button onclick="refreshOne('${esc(u.name)}')" class="text-green-600 hover:underline whitespace-nowrap">刷新</button>
+        <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline whitespace-nowrap">测试</button>
+        <button onclick="editUpstream('${esc(u.name)}')" class="text-blue-500 hover:underline whitespace-nowrap">编辑</button>
       </td>
     </tr>
     <tr id="nodes-row-${esc(u.name)}" class="hidden">
@@ -738,10 +752,17 @@ async function addUpstream() {
   }
 }
 
+async function refreshOne(name) {
+  toast('刷新中...');
+  const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/refresh`, { method: 'POST' });
+  toast(data?.ok ? `刷新成功! ${data.nodeCount} 个节点` : `刷新失败: ${data?.error}`, data?.ok);
+  loadUpstreams();
+}
+
 async function testExisting(name) {
   toast('测试中...');
   const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/test`, { method: 'POST' });
-  toast(data?.ok ? `正常! ${data.nodeCount} 个节点` : `失败: ${data?.error}`, data?.ok);
+  toast(data?.ok ? `URL 可达! ${data.nodeCount} 个节点` : `失败: ${data?.error}`, data?.ok);
 }
 
 async function delUpstreamFromModal() {
@@ -775,8 +796,8 @@ async function loadNodes() {
       <td class="px-4 py-3">${n.port}</td>
       <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="text-gray-400">-</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="editNode('${esc(n.name)}')" class="text-blue-500 hover:underline">编辑</button>
         <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="text-yellow-600 hover:underline">测试</button>
+        <button onclick="editNode('${esc(n.name)}')" class="text-blue-500 hover:underline">编辑</button>
       </td>
     </tr>
   `).join('');
@@ -801,6 +822,13 @@ async function testNewNode() {
     el.innerHTML = `<span class="text-green-600">连通! 延迟 ${data.latency}ms</span>`;
   } else {
     el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+  }
+}
+
+async function testAllNodes() {
+  if (!_nodesData.length) return toast('暂无节点', false);
+  for (const n of _nodesData) {
+    testExistingNodeBtn(n.name);
   }
 }
 

@@ -5,7 +5,7 @@ import { handleScheduled } from './cron';
 import {
   listUsers, createUser, updateUser, deleteUser,
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
-  testUpstream, testExistingUpstream, listUpstreamNodes, testUpstreamNode, refreshAll,
+  testUpstream, testExistingUpstream, listUpstreamNodes, testUpstreamNode, refreshOne, refreshAll,
   listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode, testNewNode, testExistingNode,
   getScript, updateScript, importBaseScript,
   getScriptUrl, setScriptUrl, syncScriptFromUrl,
@@ -98,6 +98,11 @@ async function routeApi(
   const upstreamTestMatch = path.match(/^\/api\/upstreams\/([^/]+)\/test$/);
   if (upstreamTestMatch && method === 'POST') {
     return testExistingUpstream(decodeURIComponent(upstreamTestMatch[1]), env);
+  }
+
+  const upstreamRefreshMatch = path.match(/^\/api\/upstreams\/([^/]+)\/refresh$/);
+  if (upstreamRefreshMatch && method === 'POST') {
+    return refreshOne(decodeURIComponent(upstreamRefreshMatch[1]), env);
   }
 
   const upstreamMatch = path.match(/^\/api\/upstreams\/([^/]+)$/);
