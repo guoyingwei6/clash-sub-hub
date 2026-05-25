@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/javascript/javascript.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <style>
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
@@ -43,6 +44,20 @@
       <button onclick="saveUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
     </div>
     <div id="edit-test-result" class="mt-2 text-sm hidden"></div>
+  </div>
+</div>
+
+<!-- Edit Node Modal -->
+<div id="node-edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
+    <h3 class="font-semibold mb-4">编辑节点: <span id="node-edit-name" class="text-blue-600"></span></h3>
+    <textarea id="node-edit-yaml" rows="16" class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
+    <div class="flex justify-end gap-2 mt-4">
+      <button onclick="testNodeInModal()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
+      <button onclick="closeNodeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
+      <button onclick="saveNodeEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+    </div>
+    <div id="node-edit-test-result" class="mt-2 text-sm hidden"></div>
   </div>
 </div>
 
@@ -485,6 +500,7 @@ let _nodeStatus = {};
 async function loadNodes() {
   const { data } = await api('/api/custom-nodes');
   const tbody = document.getElementById('nodes-table');
+  _nodesData = data || [];
   if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-3 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
   tbody.innerHTML = data.map(n => `
     <tr class="border-t">
@@ -494,6 +510,7 @@ async function loadNodes() {
       <td class="px-4 py-3">${n.port}</td>
       <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="text-gray-400">-</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
+        <button onclick="editNode('${esc(n.name)}')" class="text-blue-500 hover:underline">编辑</button>
         <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="text-yellow-600 hover:underline">测试</button>
         <button onclick="delNode('${esc(n.name)}')" class="text-red-500 hover:underline">删除</button>
       </td>
@@ -532,6 +549,53 @@ async function testExistingNodeBtn(name) {
     : `<span class="text-red-500">${data?.error || '失败'}</span>`;
   _nodeStatus[name] = html;
   if (el) el.innerHTML = html;
+}
+
+let _nodesData = [];
+let _editingNodeName = '';
+
+function editNode(name) {
+  const node = _nodesData.find(n => n.name === name);
+  if (!node) return;
+  _editingNodeName = name;
+  document.getElementById('node-edit-name').textContent = name;
+  document.getElementById('node-edit-yaml').value = jsyaml.dump(node, { lineWidth: -1, noRefs: true, quotingType: '"' });
+  document.getElementById('node-edit-test-result').classList.add('hidden');
+  document.getElementById('node-edit-modal').classList.remove('hidden');
+}
+
+function closeNodeEditModal() {
+  document.getElementById('node-edit-modal').classList.add('hidden');
+  _editingNodeName = '';
+}
+
+async function testNodeInModal() {
+  const yamlText = document.getElementById('node-edit-yaml').value.trim();
+  if (!yamlText) return toast('YAML 为空', false);
+  const el = document.getElementById('node-edit-test-result');
+  el.classList.remove('hidden');
+  el.innerHTML = '<span class="text-gray-500">测试中...</span>';
+  const { data } = await api('/api/custom-nodes/test', { method: 'POST', body: { yaml: yamlText } });
+  if (data?.ok) {
+    el.innerHTML = `<span class="text-green-600">连通! 延迟 ${data.latency}ms</span>`;
+  } else {
+    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+  }
+}
+
+async function saveNodeEdit() {
+  const yamlText = document.getElementById('node-edit-yaml').value.trim();
+  if (!yamlText) return toast('YAML 为空', false);
+  const { ok, data } = await api(`/api/custom-nodes/${encodeURIComponent(_editingNodeName)}`, {
+    method: 'PUT', body: { yaml: yamlText }
+  });
+  if (ok) {
+    toast('节点已保存');
+    closeNodeEditModal();
+    loadNodes();
+  } else {
+    toast(data?.error || '保存失败', false);
+  }
 }
 
 async function delNode(name) {
