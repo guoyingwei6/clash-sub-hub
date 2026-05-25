@@ -1,9 +1,25 @@
-import { Env, User, Upstream, ProxyNode } from './types';
+import { Env, User, Upstream, ProxyNode, GlobalSettings } from './types';
 import { testUpstreamUrl } from './cron';
 import { handleScheduled } from './cron';
+import { getGlobalSettings } from './settings';
 import { parseClashYaml, filterNodes } from './converter';
 import { connect } from 'cloudflare:sockets';
 import yaml from 'js-yaml';
+
+// ==================== 全局设置 API ====================
+
+export async function getSettings(env: Env): Promise<Response> {
+  return Response.json(await getGlobalSettings(env));
+}
+
+export async function updateSettings(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as Partial<GlobalSettings>;
+  const current = await getGlobalSettings(env);
+  if (body.defaultUA !== undefined) current.defaultUA = body.defaultUA;
+  if (body.fetchTimeout !== undefined) current.fetchTimeout = body.fetchTimeout;
+  await env.KV.put('global-settings', JSON.stringify(current));
+  return Response.json({ ok: true });
+}
 
 // ==================== 用户管理 ====================
 
@@ -37,7 +53,12 @@ export async function createUser(request: Request, env: Env): Promise<Response> 
 }
 
 export async function updateUser(token: string, request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { enabled?: boolean; name?: string };
+  const body = (await request.json()) as {
+    enabled?: boolean;
+    name?: string;
+    allowedUpstreams?: string[] | null;
+    allowedCustomNodes?: string[] | null;
+  };
   const raw = await env.KV.get('users');
   if (!raw) return Response.json({ error: '用户不存在' }, { status: 404 });
 
@@ -47,6 +68,8 @@ export async function updateUser(token: string, request: Request, env: Env): Pro
 
   if (body.enabled !== undefined) user.enabled = body.enabled;
   if (body.name !== undefined) user.name = body.name;
+  if ('allowedUpstreams' in body) user.allowedUpstreams = body.allowedUpstreams;
+  if ('allowedCustomNodes' in body) user.allowedCustomNodes = body.allowedCustomNodes;
 
   await env.KV.put('users', JSON.stringify(users));
   return Response.json({ ok: true });
@@ -75,7 +98,7 @@ export async function listUpstreams(env: Env): Promise<Response> {
 }
 
 export async function createUpstream(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { name: string; url: string; userAgent?: string };
+  const body = (await request.json()) as { name: string; url: string; userAgent?: string; exclude?: string; prefix?: string };
   if (!body.name || !body.url) {
     return Response.json({ error: 'name 和 url 必填' }, { status: 400 });
   }
@@ -87,10 +110,13 @@ export async function createUpstream(request: Request, env: Env): Promise<Respon
     return Response.json({ error: '名称已存在' }, { status: 409 });
   }
 
+  const settings = await getGlobalSettings(env);
   upstreams.push({
     name: body.name,
     url: body.url,
-    userAgent: body.userAgent || 'clash.meta',
+    userAgent: body.userAgent || settings.defaultUA,
+    exclude: body.exclude,
+    prefix: body.prefix,
     lastUpdate: null,
     nodeCount: 0,
     lastError: null,
@@ -105,7 +131,7 @@ export async function updateUpstream(
   request: Request,
   env: Env
 ): Promise<Response> {
-  const body = (await request.json()) as { url?: string; userAgent?: string };
+  const body = (await request.json()) as { url?: string; userAgent?: string; exclude?: string; prefix?: string };
   const raw = await env.KV.get('upstreams');
   if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
 
@@ -115,6 +141,8 @@ export async function updateUpstream(
 
   if (body.url !== undefined) upstream.url = body.url;
   if (body.userAgent !== undefined) upstream.userAgent = body.userAgent;
+  if ('exclude' in body) upstream.exclude = body.exclude;
+  if ('prefix' in body) upstream.prefix = body.prefix;
 
   await env.KV.put('upstreams', JSON.stringify(upstreams));
   return Response.json({ ok: true });
@@ -163,6 +191,21 @@ export async function listUpstreamNodes(name: string, env: Env): Promise<Respons
     filtered: filtered.length,
     nodes: filtered.map((n) => ({ name: n.name, type: n.type, server: n.server, port: n.port })),
   });
+}
+
+export async function testUpstreamNode(name: string, request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { nodeName: string };
+  if (!body.nodeName) return Response.json({ error: 'nodeName 必填' }, { status: 400 });
+
+  const cache = await env.KV.get(`cache:${name}`);
+  if (!cache) return Response.json({ error: '无缓存' }, { status: 404 });
+
+  const nodes = parseClashYaml(cache);
+  const node = nodes.find((n) => n.name === body.nodeName);
+  if (!node) return Response.json({ error: '节点不存在' }, { status: 404 });
+
+  const result = await testNodeReachability(node.server, node.port);
+  return Response.json(result);
 }
 
 export async function refreshAll(env: Env): Promise<Response> {

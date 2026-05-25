@@ -1,5 +1,6 @@
-import { Env, Upstream } from './types';
+import { Env, Upstream, GlobalSettings } from './types';
 import { parseClashYaml } from './converter';
+import { getGlobalSettings } from './settings';
 
 export async function handleScheduled(env: Env): Promise<void> {
   // 同步外部脚本
@@ -13,6 +14,8 @@ export async function handleScheduled(env: Env): Promise<void> {
     } catch { /* 静默失败，保留旧脚本 */ }
   }
 
+  const settings = await getGlobalSettings(env);
+
   // 同步上游订阅
   const raw = await env.KV.get('upstreams');
   if (!raw) return;
@@ -21,7 +24,7 @@ export async function handleScheduled(env: Env): Promise<void> {
   const updated: Upstream[] = [];
 
   const results = await Promise.allSettled(
-    upstreams.map((u) => fetchUpstream(u, env))
+    upstreams.map((u) => fetchUpstream(u, settings, env))
   );
 
   for (let i = 0; i < upstreams.length; i++) {
@@ -39,10 +42,13 @@ export async function handleScheduled(env: Env): Promise<void> {
   await env.KV.put('upstreams', JSON.stringify(updated));
 }
 
-async function fetchUpstream(upstream: Upstream, env: Env): Promise<Upstream> {
+async function fetchUpstream(upstream: Upstream, settings: GlobalSettings, env: Env): Promise<Upstream> {
+  const timeout = (settings.fetchTimeout || 15) * 1000;
+  const uaRaw = upstream.userAgent || settings.defaultUA || 'clash.meta';
+  const ua = uaRaw.split(',')[0].trim(); // 取第一个 UA
   const resp = await fetch(upstream.url, {
-    headers: { 'User-Agent': upstream.userAgent || 'clash.meta' },
-    signal: AbortSignal.timeout(15000),
+    headers: { 'User-Agent': ua },
+    signal: AbortSignal.timeout(timeout),
   });
 
   if (!resp.ok) {

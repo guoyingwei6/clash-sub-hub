@@ -5,11 +5,12 @@ import { handleScheduled } from './cron';
 import {
   listUsers, createUser, updateUser, deleteUser,
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
-  testUpstream, testExistingUpstream, listUpstreamNodes, refreshAll,
+  testUpstream, testExistingUpstream, listUpstreamNodes, testUpstreamNode, refreshAll,
   listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode, testNewNode, testExistingNode,
   getScript, updateScript, importBaseScript,
   getScriptUrl, setScriptUrl, syncScriptFromUrl,
   importMerge, exportMerge,
+  getSettings, updateSettings,
 } from './admin';
 import UI_HTML from './ui.html';
 
@@ -28,7 +29,8 @@ export default {
     const subMatch = path.match(/^\/sub\/([^/]+)$/);
     if (subMatch) {
       const format = url.searchParams.get('format');
-      return handleSubscription(subMatch[1], format, env);
+      const mode = url.searchParams.get('mode');
+      return handleSubscription(subMatch[1], format, mode, env);
     }
 
     // 公开接口：全局扩展脚本
@@ -88,6 +90,11 @@ async function routeApi(
     return listUpstreamNodes(decodeURIComponent(upstreamNodesMatch[1]), env);
   }
 
+  const upstreamNodeTestMatch = path.match(/^\/api\/upstreams\/([^/]+)\/nodes\/test$/);
+  if (upstreamNodeTestMatch && method === 'POST') {
+    return testUpstreamNode(decodeURIComponent(upstreamNodeTestMatch[1]), request, env);
+  }
+
   const upstreamTestMatch = path.match(/^\/api\/upstreams\/([^/]+)\/test$/);
   if (upstreamTestMatch && method === 'POST') {
     return testExistingUpstream(decodeURIComponent(upstreamTestMatch[1]), env);
@@ -129,6 +136,10 @@ async function routeApi(
   if (path === '/api/script-url' && method === 'GET') return getScriptUrl(env);
   if (path === '/api/script-url' && method === 'POST') return setScriptUrl(request, env);
   if (path === '/api/script-url/sync' && method === 'POST') return syncScriptFromUrl(env);
+
+  // 全局设置
+  if (path === '/api/settings' && method === 'GET') return getSettings(env);
+  if (path === '/api/settings' && method === 'POST') return updateSettings(request, env);
 
   // 导入导出
   if (path === '/api/import/merge' && method === 'POST') return importMerge(request, env);

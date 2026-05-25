@@ -10,6 +10,7 @@ import {
 export async function handleSubscription(
   token: string,
   format: string | null,
+  mode: string | null,
   env: Env
 ): Promise<Response> {
   // 校验用户
@@ -21,8 +22,8 @@ export async function handleSubscription(
   if (!user) return new Response('无效的订阅链接', { status: 403 });
   if (!user.enabled) return new Response('订阅已被禁用', { status: 403 });
 
-  // 收集所有节点
-  const allNodes = await collectAllNodes(env);
+  // 收集该用户可见的节点
+  const allNodes = await collectAllNodes(user, env);
 
   // base64 格式：直接输出 URI 列表
   if (format === 'base64') {
@@ -35,7 +36,19 @@ export async function handleSubscription(
     });
   }
 
-  // 默认格式：完整 Clash 配置
+  // 纯节点模式：只输出 proxies，不跑脚本、不加规则
+  if (mode === 'nodes') {
+    const nodesConfig = yaml.dump({ proxies: allNodes }, { lineWidth: -1, noRefs: true });
+    return new Response(nodesConfig, {
+      headers: {
+        'Content-Type': 'text/yaml; charset=utf-8',
+        'Content-Disposition': 'attachment; filename="nodes.yaml"',
+        'Profile-Update-Interval': '1',
+      },
+    });
+  }
+
+  // 默认/full 模式：完整 Clash 配置（节点 + 脚本规则）
   const fullConfig = await buildFullConfig(allNodes, env);
   return new Response(fullConfig, {
     headers: {
@@ -46,9 +59,14 @@ export async function handleSubscription(
   });
 }
 
-async function collectAllNodes(env: Env): Promise<ProxyNode[]> {
+async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
   const upstreamsRaw = await env.KV.get('upstreams');
-  const upstreams: Upstream[] = upstreamsRaw ? JSON.parse(upstreamsRaw) : [];
+  let upstreams: Upstream[] = upstreamsRaw ? JSON.parse(upstreamsRaw) : [];
+
+  // 按用户权限过滤上游
+  if (user.allowedUpstreams != null) {
+    upstreams = upstreams.filter((u) => user.allowedUpstreams!.includes(u.name));
+  }
 
   let allNodes: ProxyNode[] = [];
 
@@ -60,20 +78,32 @@ async function collectAllNodes(env: Env): Promise<ProxyNode[]> {
     const cache = cacheResults[i];
     if (cache) {
       const nodes = parseClashYaml(cache);
-      const filtered = filterNodes(nodes);
-      // 给每个上游节点加前缀，和 Clash Verge additional-prefix 效果一致
-      const prefix = `${upstreams[i].name} | `;
-      for (const n of filtered) {
-        n.name = prefix + n.name;
+      let filtered = filterNodes(nodes);
+      // 排除关键词
+      if (upstreams[i].exclude) {
+        try {
+          const re = new RegExp(upstreams[i].exclude!, 'i');
+          filtered = filtered.filter((n) => !re.test(n.name));
+        } catch { /* 无效正则，跳过 */ }
+      }
+      // 前缀：undefined=用名称, ''=不加, 其他=自定义
+      const prefix = upstreams[i].prefix === undefined ? `${upstreams[i].name} | ` : (upstreams[i].prefix ? `${upstreams[i].prefix} | ` : '');
+      if (prefix) {
+        for (const n of filtered) {
+          n.name = prefix + n.name;
+        }
       }
       allNodes.push(...filtered);
     }
   }
 
-  // 追加自建节点（不过滤）
+  // 追加自建节点（按用户权限过滤）
   const customRaw = await env.KV.get('custom-nodes');
   if (customRaw) {
-    const customNodes: ProxyNode[] = JSON.parse(customRaw);
+    let customNodes: ProxyNode[] = JSON.parse(customRaw);
+    if (user.allowedCustomNodes != null) {
+      customNodes = customNodes.filter((n) => user.allowedCustomNodes!.includes(n.name));
+    }
     allNodes.push(...customNodes);
   }
 

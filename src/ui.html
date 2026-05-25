@@ -16,13 +16,75 @@
   .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
   .toast { position: fixed; top: 20px; right: 20px; z-index: 999; transition: opacity 0.3s; }
   .CodeMirror { height: 500px; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 13px; }
-  .cm-base .CodeMirror { height: 300px; }
+  .cm-base .CodeMirror { height: 500px; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
 
 <!-- Toast -->
 <div id="toast" class="toast hidden bg-green-500 text-white px-4 py-2 rounded shadow-lg"></div>
+
+<!-- User Edit Modal -->
+<div id="user-edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+    <h3 class="font-semibold mb-4">用户管理: <span id="ue-name" class="text-blue-600"></span></h3>
+
+    <!-- 订阅链接 -->
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
+      <div class="flex gap-2">
+        <button onclick="copySubUrl(_ueToken, 'full')" class="flex-1 bg-blue-50 border border-blue-200 text-blue-600 px-3 py-2 rounded text-sm hover:bg-blue-100">复制完整配置链接</button>
+        <button onclick="copySubUrl(_ueToken, 'nodes')" class="flex-1 bg-teal-50 border border-teal-200 text-teal-600 px-3 py-2 rounded text-sm hover:bg-teal-100">复制纯节点链接</button>
+      </div>
+    </div>
+
+    <hr class="my-3">
+
+    <!-- 启用/禁用 -->
+    <div class="mb-4 flex items-center justify-between">
+      <label class="text-sm font-medium text-gray-700">启用状态</label>
+      <label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" id="ue-enabled" class="sr-only peer">
+        <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
+      </label>
+    </div>
+
+    <hr class="my-3">
+
+    <!-- 节点权限 -->
+    <div class="mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <span class="font-medium text-sm">上游订阅权限</span>
+        <div class="flex gap-2">
+          <button onclick="permToggleAll('up', true)" class="text-xs text-blue-500 hover:underline">全选</button>
+          <button onclick="permToggleAll('up', false)" class="text-xs text-red-500 hover:underline">全不选</button>
+        </div>
+      </div>
+      <div id="perm-upstreams" class="space-y-1"></div>
+    </div>
+    <div class="mb-3">
+      <div class="flex items-center justify-between mb-2">
+        <span class="font-medium text-sm">自建节点权限</span>
+        <div class="flex gap-2">
+          <button onclick="permToggleAll('node', true)" class="text-xs text-blue-500 hover:underline">全选</button>
+          <button onclick="permToggleAll('node', false)" class="text-xs text-red-500 hover:underline">全不选</button>
+        </div>
+      </div>
+      <div id="perm-nodes" class="space-y-1"></div>
+    </div>
+
+    <hr class="my-3">
+
+    <!-- 操作按钮 -->
+    <div class="flex justify-between mt-4">
+      <button onclick="delUserFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除用户</button>
+      <div class="flex gap-2">
+        <button onclick="closeUserEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
+        <button onclick="saveUserEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- Edit Upstream Modal -->
 <div id="edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -34,14 +96,25 @@
         <input id="edit-url" class="w-full px-3 py-2 border rounded text-sm font-mono">
       </div>
       <div>
-        <label class="block text-sm text-gray-600 mb-1">User-Agent</label>
-        <input id="edit-ua" class="w-full px-3 py-2 border rounded text-sm">
+        <label class="block text-sm text-gray-600 mb-1">User-Agent（多选）</label>
+        <div id="edit-ua-list" class="flex flex-wrap gap-2"></div>
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">排除关键词（正则，留空不排除）</label>
+        <input id="edit-exclude" class="w-full px-3 py-2 border rounded text-sm" placeholder="例: 流量|到期|官网">
+      </div>
+      <div>
+        <label class="block text-sm text-gray-600 mb-1">节点前缀（留空=用订阅名称）</label>
+        <input id="edit-prefix" class="w-full px-3 py-2 border rounded text-sm" placeholder="默认: 订阅名称 | ">
       </div>
     </div>
-    <div class="flex justify-end gap-2 mt-4">
-      <button onclick="testEditUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-      <button onclick="closeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
-      <button onclick="saveUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+    <div class="flex justify-between mt-4">
+      <button onclick="delUpstreamFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除订阅</button>
+      <div class="flex gap-2">
+        <button onclick="testEditUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
+        <button onclick="closeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
+        <button onclick="saveUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+      </div>
     </div>
     <div id="edit-test-result" class="mt-2 text-sm hidden"></div>
   </div>
@@ -52,10 +125,13 @@
   <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
     <h3 class="font-semibold mb-4">编辑节点: <span id="node-edit-name" class="text-blue-600"></span></h3>
     <textarea id="node-edit-yaml" rows="16" class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
-    <div class="flex justify-end gap-2 mt-4">
-      <button onclick="testNodeInModal()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-      <button onclick="closeNodeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
-      <button onclick="saveNodeEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+    <div class="flex justify-between mt-4">
+      <button onclick="delNodeFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除节点</button>
+      <div class="flex gap-2">
+        <button onclick="testNodeInModal()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
+        <button onclick="closeNodeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
+        <button onclick="saveNodeEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+      </div>
     </div>
     <div id="node-edit-test-result" class="mt-2 text-sm hidden"></div>
   </div>
@@ -104,7 +180,7 @@
             <th class="text-left px-4 py-3">Token</th>
             <th class="text-left px-4 py-3">备注</th>
             <th class="text-left px-4 py-3">状态</th>
-            <th class="text-left px-4 py-3">创建时间</th>
+            <th class="text-left px-4 py-3">节点权限</th>
             <th class="text-left px-4 py-3">操作</th>
           </tr>
         </thead>
@@ -115,12 +191,30 @@
 
   <!-- ==================== 上游订阅 Tab ==================== -->
   <div id="tab-upstreams" class="tab-panel hidden">
+    <!-- 全局默认设置 -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
+      <div class="flex items-center justify-between cursor-pointer" onclick="document.getElementById('global-settings-body').classList.toggle('hidden')">
+        <h3 class="font-semibold">全局默认设置</h3>
+        <span class="text-gray-400 text-xs">点击展开/收起</span>
+      </div>
+      <div id="global-settings-body" class="hidden mt-3 space-y-3">
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">默认 User-Agent（多选，对所有新建订阅生效）</label>
+          <div id="global-ua-list" class="flex flex-wrap gap-2"></div>
+        </div>
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">拉取超时（秒）</label>
+          <input id="global-timeout" type="number" value="15" class="w-24 px-3 py-2 border rounded text-sm">
+        </div>
+        <button onclick="saveGlobalSettings()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600">保存设置</button>
+      </div>
+    </div>
+
     <div class="bg-white rounded-lg shadow p-4 mb-4">
       <h3 class="font-semibold mb-3">添加上游订阅</h3>
       <div class="flex gap-2 mb-2">
         <input id="new-up-name" placeholder="名称" class="w-32 px-3 py-2 border rounded text-sm">
         <input id="new-up-url" placeholder="订阅 URL" class="flex-1 px-3 py-2 border rounded text-sm">
-        <input id="new-up-ua" placeholder="UA (默认 clash.meta)" class="w-40 px-3 py-2 border rounded text-sm">
       </div>
       <div class="flex gap-2">
         <button onclick="testNewUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
@@ -224,7 +318,12 @@ uuid: xxx
         </div>
       </div>
       <p class="text-xs text-gray-400 mb-3">执行顺序：基础脚本 → 自定义脚本。自定义脚本不会被外部同步覆盖。</p>
-      <div id="script-editor-wrap"></div>
+      <button onclick="toggleOverrideScript()" class="text-sm text-gray-600 hover:text-blue-500 mb-2" id="btn-toggle-override">
+        ▶ 查看自定义脚本内容
+      </button>
+      <div id="override-script-wrap" class="hidden">
+        <div id="script-editor-wrap"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -257,6 +356,7 @@ function showDashboard() {
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
   loadUsers();
+  loadGlobalSettings();
   loadUpstreams();
   loadNodes();
   loadScript();
@@ -296,22 +396,31 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 });
 
 // ==================== Users ====================
+let _usersData = [];
+let _ueToken = '';
+
 async function loadUsers() {
   const { data } = await api('/api/users');
   const tbody = document.getElementById('users-table');
   if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无用户</td></tr>'; return; }
+  _usersData = data;
+  const permLabel = u => {
+    if (u.allowedUpstreams == null && u.allowedCustomNodes == null) return '全部';
+    const parts = [];
+    if (u.allowedUpstreams != null) parts.push(`${u.allowedUpstreams.length} 个订阅`);
+    if (u.allowedCustomNodes != null) parts.push(`${u.allowedCustomNodes.length} 个自建`);
+    return parts.join(', ') || '无节点';
+  };
   tbody.innerHTML = data.map(u => `
     <tr class="border-t">
-      <td class="px-4 py-3 font-mono">${esc(u.token)}</td>
+      <td class="px-4 py-3 font-mono text-xs">${esc(u.token)}</td>
       <td class="px-4 py-3">${esc(u.name)}</td>
       <td class="px-4 py-3">${u.enabled
         ? '<span class="text-green-600">启用</span>'
         : '<span class="text-red-500">禁用</span>'}</td>
-      <td class="px-4 py-3 text-gray-500">${new Date(u.createdAt).toLocaleDateString()}</td>
-      <td class="px-4 py-3 flex gap-2">
-        <button onclick="copySubUrl('${esc(u.token)}')" class="text-blue-500 hover:underline">复制链接</button>
-        <button onclick="toggleUser('${esc(u.token)}',${!u.enabled})" class="text-yellow-600 hover:underline">${u.enabled ? '禁用' : '启用'}</button>
-        <button onclick="delUser('${esc(u.token)}')" class="text-red-500 hover:underline">删除</button>
+      <td class="px-4 py-3 text-xs text-gray-500">${permLabel(u)}</td>
+      <td class="px-4 py-3">
+        <button onclick="openUserEditModal('${esc(u.token)}')" class="text-blue-500 hover:underline">编辑</button>
       </td>
     </tr>
   `).join('');
@@ -326,27 +435,134 @@ async function addUser() {
   if (ok) { document.getElementById('new-user-token').value = ''; document.getElementById('new-user-name').value = ''; loadUsers(); }
 }
 
-async function toggleUser(token, enabled) {
-  await api(`/api/users/${encodeURIComponent(token)}`, { method: 'PUT', body: { enabled } });
-  loadUsers();
-}
-
-async function delUser(token) {
-  if (!confirm(`确认删除用户 ${token}？`)) return;
-  await api(`/api/users/${encodeURIComponent(token)}`, { method: 'DELETE' });
-  toast('已删除');
-  loadUsers();
-}
-
-function copySubUrl(token) {
-  const url = `${BASE}/sub/${token}`;
+function copySubUrl(token, mode) {
+  const url = mode === 'nodes' ? `${BASE}/sub/${token}?mode=nodes` : `${BASE}/sub/${token}`;
   navigator.clipboard.writeText(url);
-  toast('订阅链接已复制');
+  toast(mode === 'nodes' ? '纯节点链接已复制' : '完整配置链接已复制');
+}
+
+async function openUserEditModal(token) {
+  _ueToken = token;
+  const user = _usersData.find(u => u.token === token);
+  if (!user) return;
+  document.getElementById('ue-name').textContent = `${user.name} (${token})`;
+  document.getElementById('ue-enabled').checked = user.enabled;
+
+  const [upRes, nodeRes] = await Promise.all([
+    api('/api/upstreams'),
+    api('/api/custom-nodes'),
+  ]);
+  const upstreams = upRes.data || [];
+  const customNodes = nodeRes.data || [];
+
+  const upEl = document.getElementById('perm-upstreams');
+  const nodeEl = document.getElementById('perm-nodes');
+
+  upEl.innerHTML = upstreams.length === 0
+    ? '<div class="text-xs text-gray-400">暂无上游订阅</div>'
+    : upstreams.map(u => {
+        const checked = user.allowedUpstreams == null || user.allowedUpstreams.includes(u.name);
+        return `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+          <input type="checkbox" class="perm-up-cb" value="${esc(u.name)}" ${checked ? 'checked' : ''}>
+          <span class="text-sm">${esc(u.name)}</span>
+          <span class="text-xs text-gray-400 ml-auto">${u.nodeCount} 个节点</span>
+        </label>`;
+      }).join('');
+
+  nodeEl.innerHTML = customNodes.length === 0
+    ? '<div class="text-xs text-gray-400">暂无自建节点</div>'
+    : customNodes.map(n => {
+        const checked = user.allowedCustomNodes == null || user.allowedCustomNodes.includes(n.name);
+        return `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
+          <input type="checkbox" class="perm-node-cb" value="${esc(n.name)}" ${checked ? 'checked' : ''}>
+          <span class="text-sm">${esc(n.name)}</span>
+          <span class="text-xs text-gray-400 ml-auto">${n.type}</span>
+        </label>`;
+      }).join('');
+
+  document.getElementById('user-edit-modal').classList.remove('hidden');
+}
+
+function closeUserEditModal() {
+  document.getElementById('user-edit-modal').classList.add('hidden');
+}
+
+function permToggleAll(type, checked) {
+  const cls = type === 'up' ? 'perm-up-cb' : 'perm-node-cb';
+  document.querySelectorAll(`.${cls}`).forEach(cb => cb.checked = checked);
+}
+
+async function saveUserEdit() {
+  const enabled = document.getElementById('ue-enabled').checked;
+  const upCbs = document.querySelectorAll('.perm-up-cb');
+  const nodeCbs = document.querySelectorAll('.perm-node-cb');
+
+  const allUpChecked = [...upCbs].every(cb => cb.checked);
+  const allNodeChecked = [...nodeCbs].every(cb => cb.checked);
+
+  const allowedUpstreams = allUpChecked ? null : [...upCbs].filter(cb => cb.checked).map(cb => cb.value);
+  const allowedCustomNodes = allNodeChecked ? null : [...nodeCbs].filter(cb => cb.checked).map(cb => cb.value);
+
+  const { ok, data } = await api(`/api/users/${encodeURIComponent(_ueToken)}`, {
+    method: 'PUT', body: { enabled, allowedUpstreams, allowedCustomNodes }
+  });
+  if (ok) {
+    toast('已保存');
+    closeUserEditModal();
+    loadUsers();
+  } else {
+    toast(data?.error || '保存失败', false);
+  }
+}
+
+async function delUserFromModal() {
+  if (!confirm(`确认删除用户 ${_ueToken}？`)) return;
+  const { ok } = await api(`/api/users/${encodeURIComponent(_ueToken)}`, { method: 'DELETE' });
+  if (ok) {
+    toast('已删除');
+    closeUserEditModal();
+    loadUsers();
+  }
 }
 
 // ==================== Upstreams ====================
 let _upstreamsData = [];
 let _editingName = '';
+const UA_PRESETS = [
+  'clash.meta', 'Mihomo', 'clash-verge/v2.2.3', 'clash-verge/v1.7.7',
+  'ClashforWindows', 'ClashX Pro', 'stash',
+];
+
+function renderUACheckboxes(containerId, selectedUA) {
+  const selected = (selectedUA || '').split(',').map(s => s.trim()).filter(Boolean);
+  const el = document.getElementById(containerId);
+  el.innerHTML = UA_PRESETS.map(ua => {
+    const checked = selected.includes(ua) ? 'checked' : '';
+    return `<label class="flex items-center gap-1 text-xs bg-gray-50 border rounded px-2 py-1 cursor-pointer hover:bg-blue-50">
+      <input type="checkbox" class="ua-cb" value="${ua}" ${checked}> ${ua}
+    </label>`;
+  }).join('');
+}
+
+function getSelectedUA(containerId) {
+  return [...document.querySelectorAll(`#${containerId} .ua-cb:checked`)].map(cb => cb.value).join(', ');
+}
+
+// 全局设置
+async function loadGlobalSettings() {
+  const { data } = await api('/api/settings');
+  if (data) {
+    renderUACheckboxes('global-ua-list', data.defaultUA);
+    document.getElementById('global-timeout').value = data.fetchTimeout || 15;
+  }
+}
+
+async function saveGlobalSettings() {
+  const defaultUA = getSelectedUA('global-ua-list') || 'clash.meta';
+  const fetchTimeout = parseInt(document.getElementById('global-timeout').value) || 15;
+  const { ok } = await api('/api/settings', { method: 'POST', body: { defaultUA, fetchTimeout } });
+  toast(ok ? '全局设置已保存' : '保存失败', ok);
+}
 
 function editUpstream(name) {
   const u = _upstreamsData.find(x => x.name === name);
@@ -354,7 +570,9 @@ function editUpstream(name) {
   _editingName = name;
   document.getElementById('edit-name').textContent = name;
   document.getElementById('edit-url').value = u.url || '';
-  document.getElementById('edit-ua').value = u.userAgent || 'clash.meta';
+  renderUACheckboxes('edit-ua-list', u.userAgent);
+  document.getElementById('edit-exclude').value = u.exclude || '';
+  document.getElementById('edit-prefix').value = u.prefix !== undefined ? u.prefix : '';
   document.getElementById('edit-test-result').classList.add('hidden');
   document.getElementById('edit-modal').classList.remove('hidden');
 }
@@ -366,7 +584,7 @@ function closeEditModal() {
 
 async function testEditUpstream() {
   const url = document.getElementById('edit-url').value.trim();
-  const ua = document.getElementById('edit-ua').value.trim();
+  const ua = getSelectedUA('edit-ua-list');
   if (!url) return toast('URL 为空', false);
   const el = document.getElementById('edit-test-result');
   el.classList.remove('hidden');
@@ -381,9 +599,11 @@ async function testEditUpstream() {
 
 async function saveUpstream() {
   const url = document.getElementById('edit-url').value.trim();
-  const ua = document.getElementById('edit-ua').value.trim();
+  const ua = getSelectedUA('edit-ua-list');
+  const exclude = document.getElementById('edit-exclude').value.trim();
+  const prefix = document.getElementById('edit-prefix').value;
   const { ok, data } = await api(`/api/upstreams/${encodeURIComponent(_editingName)}`, {
-    method: 'PUT', body: { url, userAgent: ua || 'clash.meta' }
+    method: 'PUT', body: { url, userAgent: ua || undefined, exclude: exclude || undefined, prefix: prefix || undefined }
   });
   if (ok) {
     toast('已保存');
@@ -411,12 +631,15 @@ async function loadUpstreams() {
       <td class="px-4 py-3 flex gap-2" onclick="event.stopPropagation()">
         <button onclick="editUpstream('${esc(u.name)}')" class="text-blue-500 hover:underline">编辑</button>
         <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline">测试</button>
-        <button onclick="delUpstream('${esc(u.name)}')" class="text-red-500 hover:underline">删除</button>
       </td>
     </tr>
     <tr id="nodes-row-${esc(u.name)}" class="hidden">
       <td colspan="6" class="px-4 py-2 bg-gray-50">
-        <div id="nodes-list-${esc(u.name)}" class="text-xs text-gray-500">加载中...</div>
+        <div class="flex items-center gap-2 mb-2">
+          <span id="nodes-summary-${esc(u.name)}" class="text-xs text-gray-500">加载中...</span>
+          <button onclick="event.stopPropagation(); testAllUpstreamNodes('${esc(u.name)}')" class="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded hover:bg-yellow-600">全部测速</button>
+        </div>
+        <div id="nodes-list-${esc(u.name)}" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>
       </td>
     </tr>
   `).join('');
@@ -432,25 +655,68 @@ async function toggleUpstreamNodes(name) {
   }
   row.classList.remove('hidden');
   arrow.innerHTML = '&#9660;';
+  const summary = document.getElementById(`nodes-summary-${name}`);
   const el = document.getElementById(`nodes-list-${name}`);
-  el.textContent = '加载中...';
+  summary.textContent = '加载中...';
+  el.innerHTML = '';
   const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/nodes`);
   if (!data || !data.nodes || data.nodes.length === 0) {
-    el.textContent = '暂无缓存节点（请先刷新）';
+    summary.textContent = '暂无缓存节点（请先刷新）';
     return;
   }
-  el.innerHTML = `<span class="text-gray-700 font-medium">共 ${data.total} 个节点，过滤后 ${data.filtered} 个：</span><br>` +
-    data.nodes.map(n => `<span class="inline-block bg-white border rounded px-2 py-0.5 mr-1 mt-1">${esc(n.name)} <span class="text-gray-400">${n.type}</span></span>`).join('');
+  summary.textContent = `共 ${data.total} 个节点，过滤后 ${data.filtered} 个`;
+  el.innerHTML = data.nodes.map(n => `
+    <div class="bg-white border rounded-lg px-3 py-2 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow"
+         onclick="event.stopPropagation(); testOneUpstreamNode('${esc(name)}', '${esc(n.name)}', this)">
+      <div class="min-w-0 flex-1 mr-2">
+        <div class="text-sm font-medium truncate">${esc(n.name)}</div>
+        <div class="flex gap-1 mt-0.5">
+          <span class="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-gray-500">${esc(n.type)}</span>
+          <span class="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-gray-400">${n.port}</span>
+        </div>
+      </div>
+      <span class="node-latency text-sm font-semibold whitespace-nowrap"></span>
+    </div>
+  `).join('');
+}
+
+function latencyColor(ms) {
+  if (ms <= 100) return 'text-green-500';
+  if (ms <= 300) return 'text-yellow-500';
+  return 'text-orange-500';
+}
+
+async function testOneUpstreamNode(upstreamName, nodeName, cardEl) {
+  const latencyEl = cardEl.querySelector('.node-latency');
+  latencyEl.className = 'node-latency text-sm font-semibold whitespace-nowrap text-gray-400';
+  latencyEl.textContent = '...';
+  const { data } = await api(`/api/upstreams/${encodeURIComponent(upstreamName)}/nodes/test`, {
+    method: 'POST', body: { nodeName }
+  });
+  if (data?.ok) {
+    latencyEl.className = `node-latency text-sm font-semibold whitespace-nowrap ${latencyColor(data.latency)}`;
+    latencyEl.textContent = `${data.latency} ms`;
+  } else {
+    latencyEl.className = 'node-latency text-sm font-semibold whitespace-nowrap text-red-400';
+    latencyEl.textContent = 'timeout';
+  }
+}
+
+async function testAllUpstreamNodes(upstreamName) {
+  const el = document.getElementById(`nodes-list-${upstreamName}`);
+  const cards = el.querySelectorAll('[onclick]');
+  for (const card of cards) {
+    card.click();
+  }
 }
 
 async function testNewUpstream() {
   const url = document.getElementById('new-up-url').value.trim();
-  const ua = document.getElementById('new-up-ua').value.trim();
   if (!url) return toast('请填写 URL', false);
   const el = document.getElementById('test-result');
   el.classList.remove('hidden');
   el.innerHTML = '<span class="text-gray-500">测试中...</span>';
-  const { data } = await api('/api/upstreams/test', { method: 'POST', body: { url, userAgent: ua || 'clash.meta' } });
+  const { data } = await api('/api/upstreams/test', { method: 'POST', body: { url, userAgent: 'clash.meta' } });
   if (data?.ok) {
     el.innerHTML = `<span class="text-green-600">成功! 解析到 ${data.nodeCount} 个节点</span><br><span class="text-gray-500">预览: ${data.preview.join(', ')}</span>`;
   } else {
@@ -461,14 +727,12 @@ async function testNewUpstream() {
 async function addUpstream() {
   const name = document.getElementById('new-up-name').value.trim();
   const url = document.getElementById('new-up-url').value.trim();
-  const ua = document.getElementById('new-up-ua').value.trim();
   if (!name || !url) return toast('请填写名称和 URL', false);
-  const { ok, data } = await api('/api/upstreams', { method: 'POST', body: { name, url, userAgent: ua || 'clash.meta' } });
+  const { ok, data } = await api('/api/upstreams', { method: 'POST', body: { name, url } });
   toast(ok ? '导入成功' : (data?.error || '导入失败'), ok);
   if (ok) {
     document.getElementById('new-up-name').value = '';
     document.getElementById('new-up-url').value = '';
-    document.getElementById('new-up-ua').value = '';
     document.getElementById('test-result').classList.add('hidden');
     loadUpstreams();
   }
@@ -480,10 +744,11 @@ async function testExisting(name) {
   toast(data?.ok ? `正常! ${data.nodeCount} 个节点` : `失败: ${data?.error}`, data?.ok);
 }
 
-async function delUpstream(name) {
-  if (!confirm(`确认删除订阅 ${name}？`)) return;
-  await api(`/api/upstreams/${encodeURIComponent(name)}`, { method: 'DELETE' });
+async function delUpstreamFromModal() {
+  if (!confirm(`确认删除订阅 ${_editingName}？`)) return;
+  await api(`/api/upstreams/${encodeURIComponent(_editingName)}`, { method: 'DELETE' });
   toast('已删除');
+  closeEditModal();
   loadUpstreams();
 }
 
@@ -512,7 +777,6 @@ async function loadNodes() {
       <td class="px-4 py-3 flex gap-2">
         <button onclick="editNode('${esc(n.name)}')" class="text-blue-500 hover:underline">编辑</button>
         <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="text-yellow-600 hover:underline">测试</button>
-        <button onclick="delNode('${esc(n.name)}')" class="text-red-500 hover:underline">删除</button>
       </td>
     </tr>
   `).join('');
@@ -598,10 +862,11 @@ async function saveNodeEdit() {
   }
 }
 
-async function delNode(name) {
-  if (!confirm(`确认删除节点 ${name}？`)) return;
-  await api(`/api/custom-nodes/${encodeURIComponent(name)}`, { method: 'DELETE' });
+async function delNodeFromModal() {
+  if (!confirm(`确认删除节点 ${_editingNodeName}？`)) return;
+  await api(`/api/custom-nodes/${encodeURIComponent(_editingNodeName)}`, { method: 'DELETE' });
   toast('已删除');
+  closeNodeEditModal();
   loadNodes();
 }
 
@@ -649,6 +914,19 @@ function toggleBaseScript() {
   } else {
     wrap.classList.add('hidden');
     btn.textContent = '▶ 查看基础脚本内容';
+  }
+}
+
+function toggleOverrideScript() {
+  const wrap = document.getElementById('override-script-wrap');
+  const btn = document.getElementById('btn-toggle-override');
+  if (wrap.classList.contains('hidden')) {
+    wrap.classList.remove('hidden');
+    btn.textContent = '▼ 收起自定义脚本内容';
+    setTimeout(() => _cmOverride.refresh(), 0);
+  } else {
+    wrap.classList.add('hidden');
+    btn.textContent = '▶ 查看自定义脚本内容';
   }
 }
 
