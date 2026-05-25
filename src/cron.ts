@@ -23,8 +23,9 @@ export async function handleScheduled(env: Env): Promise<void> {
   const upstreams: Upstream[] = JSON.parse(raw);
   const updated: Upstream[] = [];
 
+  // 跳过本地拉取模式的上游
   const results = await Promise.allSettled(
-    upstreams.map((u) => fetchUpstream(u, settings, env))
+    upstreams.map((u) => u.localFetch ? Promise.resolve(u) : fetchUpstream(u, settings, env))
   );
 
   for (let i = 0; i < upstreams.length; i++) {
@@ -88,9 +89,14 @@ export async function fetchUpstream(upstream: Upstream, settings: GlobalSettings
       if (resp.ok) {
         const text = await resp.text();
         const nodes = parseClashYaml(text);
+        if (nodes.length === 0) {
+          errors.push(`${ua.slice(0, 20)}: 200 但解析 0 节点`);
+          continue;
+        }
         await env.KV.put(`cache:${upstream.name}`, text);
         return {
           ...upstream,
+          localFetch: false,
           lastUpdate: new Date().toISOString(),
           nodeCount: nodes.length,
           lastError: null,
@@ -106,7 +112,8 @@ export async function fetchUpstream(upstream: Upstream, settings: GlobalSettings
   const detail = errors.slice(0, 3).join('; ');
   return {
     ...upstream,
-    lastError: `全部 ${allUAs.length} 个 UA 失败 (${detail})`,
+    localFetch: true,
+    lastError: `全部 ${allUAs.length} 个 UA 失败，已切换本地拉取 (${detail})`,
   };
 }
 

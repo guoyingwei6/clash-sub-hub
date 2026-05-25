@@ -133,7 +133,7 @@ export async function updateUpstream(
   request: Request,
   env: Env
 ): Promise<Response> {
-  const body = (await request.json()) as { url?: string; userAgent?: string; exclude?: string; prefix?: string };
+  const body = (await request.json()) as { url?: string; userAgent?: string; exclude?: string; prefix?: string; localFetch?: boolean };
   const raw = await env.KV.get('upstreams');
   if (!raw) return Response.json({ error: '不存在' }, { status: 404 });
 
@@ -145,6 +145,7 @@ export async function updateUpstream(
   if (body.userAgent !== undefined) upstream.userAgent = body.userAgent;
   if ('exclude' in body) upstream.exclude = body.exclude;
   if ('prefix' in body) upstream.prefix = body.prefix;
+  if ('localFetch' in body) upstream.localFetch = body.localFetch;
 
   await env.KV.put('upstreams', JSON.stringify(upstreams));
   return Response.json({ ok: true });

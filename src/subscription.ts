@@ -7,6 +7,7 @@ import {
   nodesToBase64,
 } from './converter';
 import { getGlobalSettings } from './settings';
+import { main as builtinScript } from '../ClashVerge-AI-Academic-Enhanced.js';
 
 export async function handleSubscription(
   token: string,
@@ -23,10 +24,10 @@ export async function handleSubscription(
   if (!user) return new Response('无效的订阅链接', { status: 403 });
   if (!user.enabled) return new Response('订阅已被禁用', { status: 403 });
 
-  // 收集该用户可见的节点
-  const allNodes = await collectAllNodes(user, env);
+  // 收集该用户可见的节点 + 本地拉取的上游
+  const { nodes: allNodes, providers } = await collectAllNodes(user, env);
 
-  // base64 格式：直接输出 URI 列表
+  // base64 格式：直接输出 URI 列表（本地拉取的上游无法包含）
   if (format === 'base64') {
     return new Response(nodesToBase64(allNodes), {
       headers: {
@@ -49,8 +50,8 @@ export async function handleSubscription(
     });
   }
 
-  // 默认/full 模式：完整 Clash 配置（节点 + 脚本规则）
-  const fullConfig = await buildFullConfig(allNodes, env);
+  // 默认/full 模式：完整 Clash 配置（节点 + 脚本规则 + proxy-providers）
+  const fullConfig = await buildFullConfig(allNodes, providers, env);
   return new Response(fullConfig, {
     headers: {
       'Content-Type': 'text/yaml; charset=utf-8',
@@ -60,7 +61,15 @@ export async function handleSubscription(
   });
 }
 
-async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
+interface ProviderInfo {
+  name: string;
+  url: string;
+  userAgent: string;
+  prefix: string;
+  exclude?: string;
+}
+
+async function collectAllNodes(user: User, env: Env): Promise<{ nodes: ProxyNode[]; providers: ProviderInfo[] }> {
   const upstreamsRaw = await env.KV.get('upstreams');
   let upstreams: Upstream[] = upstreamsRaw ? JSON.parse(upstreamsRaw) : [];
 
@@ -74,25 +83,41 @@ async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
   }
 
   let allNodes: ProxyNode[] = [];
+  const providers: ProviderInfo[] = [];
 
+  // 分离：本地拉取的上游 vs CF拉取的上游
+  const cfUpstreams = upstreams.filter((u) => !u.localFetch);
+  const localUpstreams = upstreams.filter((u) => u.localFetch);
+
+  // 本地拉取的上游 → 输出为 proxy-providers
+  for (const u of localUpstreams) {
+    const prefix = u.prefix === undefined ? `${u.name} | ` : (u.prefix ? `${u.prefix} | ` : '');
+    providers.push({
+      name: u.name,
+      url: u.url,
+      userAgent: u.userAgent || settings.defaultUA,
+      prefix,
+      exclude: u.exclude,
+    });
+  }
+
+  // CF拉取的上游 → 直接读缓存
   const cacheResults = await Promise.all(
-    upstreams.map((u) => env.KV.get(`cache:${u.name}`))
+    cfUpstreams.map((u) => env.KV.get(`cache:${u.name}`))
   );
 
-  for (let i = 0; i < upstreams.length; i++) {
+  for (let i = 0; i < cfUpstreams.length; i++) {
     const cache = cacheResults[i];
     if (cache) {
       const nodes = parseClashYaml(cache);
       let filtered = shouldFilter ? filterNodes(nodes) : nodes;
-      // 排除关键词
-      if (upstreams[i].exclude) {
+      if (cfUpstreams[i].exclude) {
         try {
-          const re = new RegExp(upstreams[i].exclude!, 'i');
+          const re = new RegExp(cfUpstreams[i].exclude!, 'i');
           filtered = filtered.filter((n) => !re.test(n.name));
         } catch { /* 无效正则，跳过 */ }
       }
-      // 前缀：undefined=用名称, ''=不加, 其他=自定义
-      const prefix = upstreams[i].prefix === undefined ? `${upstreams[i].name} | ` : (upstreams[i].prefix ? `${upstreams[i].prefix} | ` : '');
+      const prefix = cfUpstreams[i].prefix === undefined ? `${cfUpstreams[i].name} | ` : (cfUpstreams[i].prefix ? `${cfUpstreams[i].prefix} | ` : '');
       if (prefix) {
         for (const n of filtered) {
           n.name = prefix + n.name;
@@ -112,40 +137,84 @@ async function collectAllNodes(user: User, env: Env): Promise<ProxyNode[]> {
     allNodes.push(...customNodes);
   }
 
-  return deduplicateNodes(allNodes);
+  return { nodes: deduplicateNodes(allNodes), providers };
 }
 
 async function buildFullConfig(
   proxies: ProxyNode[],
+  providers: ProviderInfo[],
   env: Env
 ): Promise<string> {
-  const baseScript = await env.KV.get('script-base') || await env.KV.get('script') || '';
   const overrideScript = await env.KV.get('script-override') || '';
+
+  // 构建 proxy-providers（本地拉取的上游）
+  const proxyProviders: Record<string, unknown> = {};
+  for (const p of providers) {
+    const provider: Record<string, unknown> = {
+      type: 'http',
+      url: p.url,
+      interval: 3600,
+      path: `./providers/${p.name}.yaml`,
+      'health-check': {
+        enable: true,
+        url: 'http://www.gstatic.com/generate_204',
+        interval: 300,
+      },
+      header: { 'User-Agent': [p.userAgent] },
+    };
+    if (p.prefix) {
+      provider.override = { 'additional-prefix': p.prefix };
+    }
+    if (p.exclude) {
+      provider['exclude-filter'] = p.exclude;
+    }
+    proxyProviders[p.name] = provider;
+  }
 
   let config: Record<string, unknown> = {
     proxies,
     'proxy-groups': [],
-    'proxy-providers': {},
+    'proxy-providers': proxyProviders,
     'rule-providers': {},
     rules: [],
   };
 
-  // 链式执行：基础脚本 → 自定义脚本
-  if (baseScript) {
-    try {
-      const result = executeScript(baseScript, config);
-      if (result) config = result;
-    } catch (e) {
-      console.error('基础脚本执行失败:', e);
-    }
+  // 执行内置脚本（静态导入，不需要 new Function）
+  try {
+    const result = builtinScript(config);
+    if (result && typeof result === 'object') config = result;
+  } catch (e) {
+    console.error('内置脚本执行失败:', e);
   }
 
+  // 执行自定义追加脚本（需要 new Function，免费版可能不可用）
   if (overrideScript) {
     try {
       const result = executeScript(overrideScript, config);
       if (result) config = result;
     } catch (e) {
       console.error('自定义脚本执行失败:', e);
+    }
+  }
+
+  // 脚本执行后，把 proxies 里的节点名注入到带 use 的分组
+  // （脚本设计给 Clash Verge 本地用，依赖 proxy-providers 获取机场节点；
+  //   Hub 把节点直接放在 proxies 里，需要补充到分组的 proxies 字段）
+  const allProxyNames = (config.proxies as ProxyNode[]).map((p) => p.name);
+  const groups = config['proxy-groups'] as Record<string, unknown>[] | undefined;
+  if (groups && Array.isArray(groups) && allProxyNames.length > 0) {
+    for (const group of groups) {
+      if (!group.use) continue; // 只处理引用了 proxy-providers 的分组
+      const existing = (group.proxies as string[]) || [];
+      const filter = group.filter as string | undefined;
+      let namesToAdd = allProxyNames;
+      if (filter) {
+        try {
+          const re = new RegExp(filter);
+          namesToAdd = namesToAdd.filter((n) => re.test(n));
+        } catch { /* 无效正则，跳过过滤 */ }
+      }
+      group.proxies = [...new Set([...existing, ...namesToAdd])];
     }
   }
 

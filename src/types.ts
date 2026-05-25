@@ -19,6 +19,7 @@ export interface Upstream {
   userAgent: string;
   exclude?: string;         // 排除关键词（正则）
   prefix?: string;          // 自定义前缀，空字符串=不加前缀，undefined=用名称
+  localFetch?: boolean;     // true=本地拉取模式（proxy-provider），CF不拉取
   lastUpdate: string | null;
   nodeCount: number;
   lastError: string | null;

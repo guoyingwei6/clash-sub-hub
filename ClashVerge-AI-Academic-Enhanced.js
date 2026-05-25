@@ -404,3 +404,6 @@ function main(config) {
 
   return config;
 }
+
+// ES module export for Workers static import
+export { main };
