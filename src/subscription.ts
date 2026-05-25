@@ -32,7 +32,7 @@ export async function handleSubscription(
     return new Response(nodesToBase64(allNodes), {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="proxies"',
+        'Content-Disposition': 'attachment; filename=proxies',
         'Profile-Update-Interval': '1',
       },
     });
@@ -44,7 +44,7 @@ export async function handleSubscription(
     return new Response(nodesConfig, {
       headers: {
         'Content-Type': 'text/yaml; charset=utf-8',
-        'Content-Disposition': 'attachment; filename="nodes.yaml"',
+        'Content-Disposition': 'attachment; filename=nodes.yaml',
         'Profile-Update-Interval': '1',
       },
     });
@@ -55,7 +55,7 @@ export async function handleSubscription(
   return new Response(fullConfig, {
     headers: {
       'Content-Type': 'text/yaml; charset=utf-8',
-      'Content-Disposition': 'attachment; filename="config.yaml"',
+      'Content-Disposition': 'attachment; filename=clash_sub_hub.yaml',
       'Profile-Update-Interval': '1',
     },
   });
@@ -85,12 +85,8 @@ async function collectAllNodes(user: User, env: Env): Promise<{ nodes: ProxyNode
   let allNodes: ProxyNode[] = [];
   const providers: ProviderInfo[] = [];
 
-  // 分离：本地拉取的上游 vs CF拉取的上游
-  const cfUpstreams = upstreams.filter((u) => !u.localFetch);
-  const localUpstreams = upstreams.filter((u) => u.localFetch);
-
-  // 本地拉取的上游 → 输出为 proxy-providers
-  for (const u of localUpstreams) {
+  // 所有上游都输出为 proxy-providers，由客户端直接拉取最新节点
+  for (const u of upstreams) {
     const prefix = u.prefix === undefined ? `${u.name} | ` : (u.prefix ? `${u.prefix} | ` : '');
     providers.push({
       name: u.name,
@@ -99,32 +95,6 @@ async function collectAllNodes(user: User, env: Env): Promise<{ nodes: ProxyNode
       prefix,
       exclude: u.exclude,
     });
-  }
-
-  // CF拉取的上游 → 直接读缓存
-  const cacheResults = await Promise.all(
-    cfUpstreams.map((u) => env.KV.get(`cache:${u.name}`))
-  );
-
-  for (let i = 0; i < cfUpstreams.length; i++) {
-    const cache = cacheResults[i];
-    if (cache) {
-      const nodes = parseClashYaml(cache);
-      let filtered = shouldFilter ? filterNodes(nodes) : nodes;
-      if (cfUpstreams[i].exclude) {
-        try {
-          const re = new RegExp(cfUpstreams[i].exclude!, 'i');
-          filtered = filtered.filter((n) => !re.test(n.name));
-        } catch { /* 无效正则，跳过 */ }
-      }
-      const prefix = cfUpstreams[i].prefix === undefined ? `${cfUpstreams[i].name} | ` : (cfUpstreams[i].prefix ? `${cfUpstreams[i].prefix} | ` : '');
-      if (prefix) {
-        for (const n of filtered) {
-          n.name = prefix + n.name;
-        }
-      }
-      allNodes.push(...filtered);
-    }
   }
 
   // 追加自建节点（按用户权限过滤）

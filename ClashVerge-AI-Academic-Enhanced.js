@@ -316,7 +316,7 @@ function main(config) {
       type: "url-test",
       tolerance: 100,
       use: providerNames,
-      filter: "^(?!.*(BPB|cfnew|Edge|官网|套餐|流量|异常|剩余|ISP|all|免费|低倍率|0\\.[0-9]x|测试|到期)).*$",
+      filter: "^(?!.*(BPB|cfnew|Edge|自建|官网|套餐|流量|异常|剩余|ISP|all|免费|低倍率|0\\.[0-9]x|测试|到期)).*(日本|香港|韩国|台湾|美国|JP|HK|KR|TW|US).*$",
       icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/ambulance.svg"
     }] : []),
     { name: "谷歌服务", proxies: commonProxies, icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/google.svg" },
