@@ -84,10 +84,10 @@ async function buildFullConfig(
   proxies: ProxyNode[],
   env: Env
 ): Promise<string> {
-  const script = await env.KV.get('script');
+  const baseScript = await env.KV.get('script-base') || await env.KV.get('script') || '';
+  const overrideScript = await env.KV.get('script-override') || '';
 
-  // 构造一个基础 config 对象，模拟 Clash Verge 传给脚本的 config
-  const baseConfig: Record<string, unknown> = {
+  let config: Record<string, unknown> = {
     proxies,
     'proxy-groups': [],
     'proxy-providers': {},
@@ -95,21 +95,26 @@ async function buildFullConfig(
     rules: [],
   };
 
-  if (script) {
+  // 链式执行：基础脚本 → 自定义脚本
+  if (baseScript) {
     try {
-      // 在沙箱中执行管理员脚本
-      const result = executeScript(script, baseConfig);
-      if (result) {
-        return yaml.dump(result, { lineWidth: -1, noRefs: true });
-      }
+      const result = executeScript(baseScript, config);
+      if (result) config = result;
     } catch (e) {
-      // 脚本执行失败，回退到纯节点输出
-      console.error('脚本执行失败:', e);
+      console.error('基础脚本执行失败:', e);
     }
   }
 
-  // 无脚本或脚本失败：输出基础配置
-  return yaml.dump(baseConfig, { lineWidth: -1, noRefs: true });
+  if (overrideScript) {
+    try {
+      const result = executeScript(overrideScript, config);
+      if (result) config = result;
+    } catch (e) {
+      console.error('自定义脚本执行失败:', e);
+    }
+  }
+
+  return yaml.dump(config, { lineWidth: -1, noRefs: true });
 }
 
 function executeScript(

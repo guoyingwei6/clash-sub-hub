@@ -5,9 +5,9 @@ import { handleScheduled } from './cron';
 import {
   listUsers, createUser, updateUser, deleteUser,
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
-  testUpstream, testExistingUpstream, refreshAll,
+  testUpstream, testExistingUpstream, listUpstreamNodes, refreshAll,
   listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode, testNewNode, testExistingNode,
-  getScript, updateScript,
+  getScript, updateScript, importBaseScript,
   getScriptUrl, setScriptUrl, syncScriptFromUrl,
   importMerge, exportMerge,
 } from './admin';
@@ -33,7 +33,7 @@ export default {
 
     // 公开接口：全局扩展脚本
     if (path === '/script.js') {
-      const script = await env.KV.get('script');
+      const script = await env.KV.get('script-base') || await env.KV.get('script') || '';
       return new Response(script || '// 暂无脚本', {
         headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
       });
@@ -83,6 +83,11 @@ async function routeApi(
   if (path === '/api/upstreams' && method === 'POST') return createUpstream(request, env);
   if (path === '/api/upstreams/test' && method === 'POST') return testUpstream(request);
 
+  const upstreamNodesMatch = path.match(/^\/api\/upstreams\/([^/]+)\/nodes$/);
+  if (upstreamNodesMatch && method === 'GET') {
+    return listUpstreamNodes(decodeURIComponent(upstreamNodesMatch[1]), env);
+  }
+
   const upstreamTestMatch = path.match(/^\/api\/upstreams\/([^/]+)\/test$/);
   if (upstreamTestMatch && method === 'POST') {
     return testExistingUpstream(decodeURIComponent(upstreamTestMatch[1]), env);
@@ -118,6 +123,7 @@ async function routeApi(
   // 脚本
   if (path === '/api/script' && method === 'GET') return getScript(env);
   if (path === '/api/script' && method === 'POST') return updateScript(request, env);
+  if (path === '/api/script/import-base' && method === 'POST') return importBaseScript(request, env);
 
   // 外部脚本 URL
   if (path === '/api/script-url' && method === 'GET') return getScriptUrl(env);

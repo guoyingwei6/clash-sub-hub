@@ -14,7 +14,8 @@
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
   .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
   .toast { position: fixed; top: 20px; right: 20px; z-index: 999; transition: opacity 0.3s; }
-  .CodeMirror { height: 600px; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 13px; }
+  .CodeMirror { height: 500px; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 13px; }
+  .cm-base .CodeMirror { height: 300px; }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -124,6 +125,7 @@
       <table class="w-full text-sm">
         <thead class="bg-gray-50">
           <tr>
+            <th class="text-left px-4 py-3 w-8"></th>
             <th class="text-left px-4 py-3">名称</th>
             <th class="text-left px-4 py-3">节点数</th>
             <th class="text-left px-4 py-3">最后更新</th>
@@ -160,6 +162,7 @@ uuid: xxx
             <th class="text-left px-4 py-3">类型</th>
             <th class="text-left px-4 py-3">服务器</th>
             <th class="text-left px-4 py-3">端口</th>
+            <th class="text-left px-4 py-3">状态</th>
             <th class="text-left px-4 py-3">操作</th>
           </tr>
         </thead>
@@ -170,19 +173,17 @@ uuid: xxx
 
   <!-- ==================== 扩展脚本 Tab ==================== -->
   <div id="tab-script" class="tab-panel hidden">
-    <div class="bg-white rounded-lg shadow p-4">
+    <!-- 基础脚本 (来自外部链接) -->
+    <div class="bg-white rounded-lg shadow p-4 mb-4">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold">全局扩展脚本 (JavaScript)</h3>
+        <h3 class="font-semibold">基础脚本 (来自外部链接)</h3>
         <div class="flex gap-2 items-center">
           <button onclick="copyScriptUrl()" class="text-sm text-blue-500 hover:text-blue-700">复制脚本链接</button>
           <label class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200">
             导入脚本
             <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
           </label>
-          <button onclick="exportScriptFile()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出脚本</button>
-          <button id="btn-edit-script" onclick="toggleEditScript()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">编辑</button>
-          <button id="btn-save-script" onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 hidden">保存</button>
-          <button id="btn-cancel-script" onclick="cancelEditScript()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 hidden">取消</button>
+          <button onclick="exportBaseScript()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出脚本</button>
         </div>
       </div>
       <div class="flex gap-2 mb-3 items-center">
@@ -190,7 +191,24 @@ uuid: xxx
         <button onclick="syncScriptFromUrl()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 whitespace-nowrap">同步</button>
         <button onclick="saveScriptUrl()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 whitespace-nowrap">保存链接</button>
       </div>
-      <p class="text-xs text-gray-400 mb-3">设置外部链接后，Cron 每小时自动同步。也可手动点「同步」立即拉取。</p>
+      <p class="text-xs text-gray-400 mb-3">Cron 每小时自动同步基础脚本，不会覆盖下方的自定义脚本。</p>
+      <button onclick="toggleBaseScript()" class="text-sm text-gray-600 hover:text-blue-500 mb-2" id="btn-toggle-base">
+        ▶ 查看基础脚本内容
+      </button>
+      <div id="base-script-wrap" class="hidden cm-base"></div>
+    </div>
+
+    <!-- 自定义追加脚本 -->
+    <div class="bg-white rounded-lg shadow p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-semibold">自定义追加脚本</h3>
+        <div class="flex gap-2 items-center">
+          <button id="btn-edit-script" onclick="toggleEditScript()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">编辑</button>
+          <button id="btn-save-script" onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 hidden">保存</button>
+          <button id="btn-cancel-script" onclick="cancelEditScript()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 hidden">取消</button>
+        </div>
+      </div>
+      <p class="text-xs text-gray-400 mb-3">执行顺序：基础脚本 → 自定义脚本。自定义脚本不会被外部同步覆盖。</p>
       <div id="script-editor-wrap"></div>
     </div>
   </div>
@@ -255,7 +273,10 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
     btn.classList.add('tab-active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
-    if (btn.dataset.tab === 'script' && _cm) setTimeout(() => _cm.refresh(), 0);
+    if (btn.dataset.tab === 'script') {
+      if (_cmOverride) setTimeout(() => _cmOverride.refresh(), 0);
+      if (_cmBase) setTimeout(() => _cmBase.refresh(), 0);
+    }
   });
 });
 
@@ -361,23 +382,50 @@ async function saveUpstream() {
 async function loadUpstreams() {
   const { data } = await api('/api/upstreams');
   const tbody = document.getElementById('upstreams-table');
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-3 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
   _upstreamsData = data;
   tbody.innerHTML = data.map(u => `
-    <tr class="border-t" id="up-row-${esc(u.name)}">
+    <tr class="border-t cursor-pointer hover:bg-gray-50" onclick="toggleUpstreamNodes('${esc(u.name)}')">
+      <td class="px-4 py-3 text-gray-400" id="arrow-${esc(u.name)}">&#9654;</td>
       <td class="px-4 py-3 font-semibold">${esc(u.name)}</td>
       <td class="px-4 py-3">${u.nodeCount}</td>
       <td class="px-4 py-3 text-gray-500 text-xs">${u.lastUpdate ? new Date(u.lastUpdate).toLocaleString() : '-'}</td>
       <td class="px-4 py-3">${u.lastError
-        ? `<span class="text-red-500">${esc(u.lastError)}</span>`
+        ? '<span class="text-red-500">' + esc(u.lastError) + '</span>'
         : (u.lastUpdate ? '<span class="text-green-600">正常</span>' : '<span class="text-gray-400">未同步</span>')}</td>
-      <td class="px-4 py-3 flex gap-2">
+      <td class="px-4 py-3 flex gap-2" onclick="event.stopPropagation()">
         <button onclick="editUpstream('${esc(u.name)}')" class="text-blue-500 hover:underline">编辑</button>
         <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline">测试</button>
         <button onclick="delUpstream('${esc(u.name)}')" class="text-red-500 hover:underline">删除</button>
       </td>
     </tr>
+    <tr id="nodes-row-${esc(u.name)}" class="hidden">
+      <td colspan="6" class="px-4 py-2 bg-gray-50">
+        <div id="nodes-list-${esc(u.name)}" class="text-xs text-gray-500">加载中...</div>
+      </td>
+    </tr>
   `).join('');
+}
+
+async function toggleUpstreamNodes(name) {
+  const row = document.getElementById(`nodes-row-${name}`);
+  const arrow = document.getElementById(`arrow-${name}`);
+  if (!row.classList.contains('hidden')) {
+    row.classList.add('hidden');
+    arrow.innerHTML = '&#9654;';
+    return;
+  }
+  row.classList.remove('hidden');
+  arrow.innerHTML = '&#9660;';
+  const el = document.getElementById(`nodes-list-${name}`);
+  el.textContent = '加载中...';
+  const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/nodes`);
+  if (!data || !data.nodes || data.nodes.length === 0) {
+    el.textContent = '暂无缓存节点（请先刷新）';
+    return;
+  }
+  el.innerHTML = `<span class="text-gray-700 font-medium">共 ${data.total} 个节点，过滤后 ${data.filtered} 个：</span><br>` +
+    data.nodes.map(n => `<span class="inline-block bg-white border rounded px-2 py-0.5 mr-1 mt-1">${esc(n.name)} <span class="text-gray-400">${n.type}</span></span>`).join('');
 }
 
 async function testNewUpstream() {
@@ -432,16 +480,19 @@ async function refreshAllUpstreams() {
 }
 
 // ==================== Custom Nodes ====================
+let _nodeStatus = {};
+
 async function loadNodes() {
   const { data } = await api('/api/custom-nodes');
   const tbody = document.getElementById('nodes-table');
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-3 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
   tbody.innerHTML = data.map(n => `
     <tr class="border-t">
       <td class="px-4 py-3 font-semibold">${esc(n.name)}</td>
       <td class="px-4 py-3">${esc(n.type)}</td>
       <td class="px-4 py-3 font-mono text-xs">${esc(n.server)}</td>
       <td class="px-4 py-3">${n.port}</td>
+      <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="text-gray-400">-</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
         <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="text-yellow-600 hover:underline">测试</button>
         <button onclick="delNode('${esc(n.name)}')" class="text-red-500 hover:underline">删除</button>
@@ -473,9 +524,14 @@ async function testNewNode() {
 }
 
 async function testExistingNodeBtn(name) {
-  toast('测试中...');
+  const el = document.getElementById(`node-status-${name}`);
+  if (el) el.innerHTML = '<span class="text-gray-500">测试中...</span>';
   const { data } = await api(`/api/custom-nodes/${encodeURIComponent(name)}/test`, { method: 'POST' });
-  toast(data?.ok ? `连通! 延迟 ${data.latency}ms` : `失败: ${data?.error}`, data?.ok);
+  const html = data?.ok
+    ? `<span class="text-green-600">连通 ${data.latency}ms</span>`
+    : `<span class="text-red-500">${data?.error || '失败'}</span>`;
+  _nodeStatus[name] = html;
+  if (el) el.innerHTML = html;
 }
 
 async function delNode(name) {
@@ -486,60 +542,77 @@ async function delNode(name) {
 }
 
 // ==================== Script (CodeMirror) ====================
-let _cm = null;
-let _scriptBackup = '';
+let _cmBase = null;
+let _cmOverride = null;
+let _overrideBackup = '';
 
 function initCodeMirror() {
-  if (_cm) return;
-  _cm = CodeMirror(document.getElementById('script-editor-wrap'), {
-    mode: 'javascript',
-    theme: 'dracula',
-    lineNumbers: true,
-    lineWrapping: false,
-    readOnly: true,
-    tabSize: 2,
-    indentWithTabs: false,
-    scrollbarStyle: 'native',
-  });
+  if (!_cmOverride) {
+    _cmOverride = CodeMirror(document.getElementById('script-editor-wrap'), {
+      mode: 'javascript', theme: 'dracula', lineNumbers: true,
+      lineWrapping: false, readOnly: true, tabSize: 2,
+      indentWithTabs: false, scrollbarStyle: 'native',
+    });
+  }
+  if (!_cmBase) {
+    _cmBase = CodeMirror(document.getElementById('base-script-wrap'), {
+      mode: 'javascript', theme: 'dracula', lineNumbers: true,
+      lineWrapping: false, readOnly: true, tabSize: 2,
+      indentWithTabs: false, scrollbarStyle: 'native',
+    });
+  }
 }
 
 async function loadScript() {
   initCodeMirror();
   const { data } = await api('/api/script');
-  const content = data?.script || '';
-  _cm.setValue(content);
-  _scriptBackup = content;
-  _cm.setOption('readOnly', true);
+  _cmBase.setValue(data?.base || '');
+  _cmOverride.setValue(data?.override || '');
+  _overrideBackup = data?.override || '';
+  _cmOverride.setOption('readOnly', true);
   document.getElementById('btn-edit-script').classList.remove('hidden');
   document.getElementById('btn-save-script').classList.add('hidden');
   document.getElementById('btn-cancel-script').classList.add('hidden');
 }
 
+function toggleBaseScript() {
+  const wrap = document.getElementById('base-script-wrap');
+  const btn = document.getElementById('btn-toggle-base');
+  if (wrap.classList.contains('hidden')) {
+    wrap.classList.remove('hidden');
+    btn.textContent = '▼ 收起基础脚本内容';
+    setTimeout(() => _cmBase.refresh(), 0);
+  } else {
+    wrap.classList.add('hidden');
+    btn.textContent = '▶ 查看基础脚本内容';
+  }
+}
+
 function toggleEditScript() {
-  _scriptBackup = _cm.getValue();
-  _cm.setOption('readOnly', false);
-  _cm.focus();
+  _overrideBackup = _cmOverride.getValue();
+  _cmOverride.setOption('readOnly', false);
+  _cmOverride.focus();
   document.getElementById('btn-edit-script').classList.add('hidden');
   document.getElementById('btn-save-script').classList.remove('hidden');
   document.getElementById('btn-cancel-script').classList.remove('hidden');
 }
 
 function cancelEditScript() {
-  _cm.setValue(_scriptBackup);
-  _cm.setOption('readOnly', true);
+  _cmOverride.setValue(_overrideBackup);
+  _cmOverride.setOption('readOnly', true);
   document.getElementById('btn-edit-script').classList.remove('hidden');
   document.getElementById('btn-save-script').classList.add('hidden');
   document.getElementById('btn-cancel-script').classList.add('hidden');
 }
 
 async function saveScript() {
-  const script = _cm.getValue();
-  await api('/api/script', { method: 'POST', body: { script } });
-  _cm.setOption('readOnly', true);
+  const override = _cmOverride.getValue();
+  await api('/api/script', { method: 'POST', body: { override } });
+  _cmOverride.setOption('readOnly', true);
   document.getElementById('btn-edit-script').classList.remove('hidden');
   document.getElementById('btn-save-script').classList.add('hidden');
   document.getElementById('btn-cancel-script').classList.add('hidden');
-  toast('脚本已保存');
+  toast('自定义脚本已保存');
 }
 
 function copyScriptUrl() {
@@ -555,7 +628,7 @@ async function loadScriptUrl() {
 async function saveScriptUrl() {
   const url = document.getElementById('script-url').value.trim();
   await api('/api/script-url', { method: 'POST', body: { url } });
-  toast(url ? '外部链接已保存，Cron 将自动同步' : '外部链接已清除');
+  toast(url ? '外部链接已保存，Cron 将自动同步基础脚本' : '外部链接已清除');
 }
 
 async function syncScriptFromUrl() {
@@ -563,7 +636,7 @@ async function syncScriptFromUrl() {
   if (!url) return toast('请填写 URL', false);
   toast('同步中...');
   const { ok, data } = await api('/api/script-url/sync', { method: 'POST' });
-  if (ok) { toast('同步成功'); await loadScript(); }
+  if (ok) { toast('基础脚本同步成功'); await loadScript(); }
   else toast(data?.error || '同步失败', false);
 }
 
@@ -594,19 +667,31 @@ async function importScriptFile(input) {
   const file = input.files[0];
   if (!file) return;
   const text = await file.text();
-  await api('/api/script', { method: 'POST', body: { script: text } });
-  toast('脚本已导入');
-  await loadScript();
+  // 导入脚本文件作为基础脚本
+  await api('/api/script-url/sync', { method: 'POST' }).catch(() => {});
+  // 直接写入 script-base（通过后端 sync 或直接上传）
+  // 简单方案：导入到基础脚本位置
+  const resp = await fetch(BASE + '/api/script/import-base', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base: text }),
+  });
+  if (resp.ok) {
+    toast('基础脚本已导入');
+    await loadScript();
+  } else {
+    toast('导入失败', false);
+  }
   input.value = '';
 }
 
-async function exportScriptFile() {
+async function exportBaseScript() {
   const { data } = await api('/api/script');
-  if (data?.script) {
-    download('script.js', data.script, 'application/javascript');
-    toast('脚本已导出');
+  if (data?.base) {
+    download('script.js', data.base, 'application/javascript');
+    toast('基础脚本已导出');
   } else {
-    toast('暂无脚本', false);
+    toast('暂无基础脚本', false);
   }
 }
 

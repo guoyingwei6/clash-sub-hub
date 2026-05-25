@@ -1,6 +1,7 @@
 import { Env, User, Upstream, ProxyNode } from './types';
 import { testUpstreamUrl } from './cron';
 import { handleScheduled } from './cron';
+import { parseClashYaml, filterNodes } from './converter';
 import { connect } from 'cloudflare:sockets';
 import yaml from 'js-yaml';
 
@@ -151,6 +152,19 @@ export async function testExistingUpstream(name: string, env: Env): Promise<Resp
   return Response.json(result);
 }
 
+export async function listUpstreamNodes(name: string, env: Env): Promise<Response> {
+  const cache = await env.KV.get(`cache:${name}`);
+  if (!cache) return Response.json({ nodes: [] });
+
+  const nodes = parseClashYaml(cache);
+  const filtered = filterNodes(nodes);
+  return Response.json({
+    total: nodes.length,
+    filtered: filtered.length,
+    nodes: filtered.map((n) => ({ name: n.name, type: n.type, server: n.server, port: n.port })),
+  });
+}
+
 export async function refreshAll(env: Env): Promise<Response> {
   await handleScheduled(env);
   return Response.json({ ok: true });
@@ -283,13 +297,20 @@ export async function testExistingNode(name: string, env: Env): Promise<Response
 // ==================== 脚本管理 ====================
 
 export async function getScript(env: Env): Promise<Response> {
-  const script = await env.KV.get('script');
-  return Response.json({ script: script || '' });
+  const base = await env.KV.get('script-base') || await env.KV.get('script') || '';
+  const override = await env.KV.get('script-override') || '';
+  return Response.json({ base, override });
 }
 
 export async function updateScript(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { script: string };
-  await env.KV.put('script', body.script || '');
+  const body = (await request.json()) as { override: string };
+  await env.KV.put('script-override', body.override || '');
+  return Response.json({ ok: true });
+}
+
+export async function importBaseScript(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { base: string };
+  await env.KV.put('script-base', body.base || '');
   return Response.json({ ok: true });
 }
 
@@ -314,7 +335,7 @@ export async function syncScriptFromUrl(env: Env): Promise<Response> {
     const resp = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (!resp.ok) return Response.json({ error: `HTTP ${resp.status}` }, { status: 502 });
     const text = await resp.text();
-    await env.KV.put('script', text);
+    await env.KV.put('script-base', text);
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 502 });

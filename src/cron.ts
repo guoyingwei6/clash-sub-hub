@@ -2,6 +2,18 @@ import { Env, Upstream } from './types';
 import { parseClashYaml } from './converter';
 
 export async function handleScheduled(env: Env): Promise<void> {
+  // 同步外部脚本
+  const scriptUrl = await env.KV.get('script-url');
+  if (scriptUrl) {
+    try {
+      const resp = await fetch(scriptUrl, { signal: AbortSignal.timeout(15000) });
+      if (resp.ok) {
+        await env.KV.put('script-base', await resp.text());
+      }
+    } catch { /* 静默失败，保留旧脚本 */ }
+  }
+
+  // 同步上游订阅
   const raw = await env.KV.get('upstreams');
   if (!raw) return;
 
