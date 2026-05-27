@@ -3,6 +3,9 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+[triggers]
+crons = ["0 2 * * *"]
+
 [[kv_namespaces]]
 binding = "KV"
 id = "58dfb8a63c1b43f58c840d3b14bfae80"
