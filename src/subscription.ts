@@ -7,7 +7,7 @@ import {
   nodesToBase64,
 } from './converter';
 import { getGlobalSettings } from './settings';
-import { main as builtinScript } from '../ClashVerge-AI-Academic-Enhanced.js';
+import { runBuiltinScript } from './clashverge-script';
 
 export async function handleSubscription(
   token: string,
@@ -15,49 +15,53 @@ export async function handleSubscription(
   mode: string | null,
   env: Env
 ): Promise<Response> {
-  // 校验用户
-  const usersRaw = await env.KV.get('users');
-  if (!usersRaw) return new Response('未找到用户', { status: 403 });
+  const userResult = await resolveUser(token, env);
+  if (userResult.response) return userResult.response;
+  const user = userResult.user!;
 
-  const users: User[] = JSON.parse(usersRaw);
-  const user = users.find((u) => u.token === token);
-  if (!user) return new Response('无效的订阅链接', { status: 403 });
-  if (!user.enabled) return new Response('订阅已被禁用', { status: 403 });
+  const wantsMaterialized = isMaterializedMode(mode) || format === 'base64' || mode === 'nodes';
+  const data = await collectSubscriptionData(user, env, { includeCachedNodes: wantsMaterialized });
+  const outputNodes = wantsMaterialized ? data.materializedNodes : data.customNodes;
 
-  // 收集该用户可见的节点 + 本地拉取的上游
-  const { nodes: allNodes, providers } = await collectAllNodes(user, env);
-
-  // base64 格式：直接输出 URI 列表（本地拉取的上游无法包含）
+  // base64 格式：输出可转换为 URI 的已物化节点，适合 Shadowrocket 等客户端。
   if (format === 'base64') {
-    return new Response(nodesToBase64(allNodes), {
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Content-Disposition': 'attachment; filename=proxies',
-        'Profile-Update-Interval': '1',
-      },
+    return new Response(nodesToBase64(outputNodes), {
+      headers: subscriptionHeaders('text/plain; charset=utf-8', 'proxies'),
     });
   }
 
-  // 纯节点模式：只输出 proxies，不跑脚本、不加规则
+  // 纯节点模式：输出已物化的 proxies，不跑脚本、不加规则。
   if (mode === 'nodes') {
-    const nodesConfig = yaml.dump({ proxies: allNodes }, { lineWidth: -1, noRefs: true });
+    const nodesConfig = yaml.dump({ proxies: outputNodes }, { lineWidth: -1, noRefs: true });
     return new Response(nodesConfig, {
-      headers: {
-        'Content-Type': 'text/yaml; charset=utf-8',
-        'Content-Disposition': 'attachment; filename=nodes.yaml',
-        'Profile-Update-Interval': '1',
-      },
+      headers: subscriptionHeaders('text/yaml; charset=utf-8', 'nodes.yaml'),
     });
   }
 
-  // 默认/full 模式：完整 Clash 配置（节点 + 脚本规则 + proxy-providers）
-  const fullConfig = await buildFullConfig(allNodes, providers, env);
+  // 物化模式：Worker 使用缓存的上游节点 + 自建节点生成完整 Mihomo YAML，不依赖 Clash Verge Merge。
+  if (isMaterializedMode(mode)) {
+    const fullConfig = await buildFullConfig(outputNodes, [], env);
+    return new Response(fullConfig, {
+      headers: subscriptionHeaders('text/yaml; charset=utf-8', 'clash_sub_hub_materialized.yaml'),
+    });
+  }
+
+  // 默认/full 模式：保留原 Clash Verge 高级玩法，输出 proxy-providers + 自建节点 + 脚本规则。
+  const fullConfig = await buildFullConfig(data.customNodes, data.providers, env);
   return new Response(fullConfig, {
-    headers: {
-      'Content-Type': 'text/yaml; charset=utf-8',
-      'Content-Disposition': 'attachment; filename=clash_sub_hub.yaml',
-      'Profile-Update-Interval': '1',
-    },
+    headers: subscriptionHeaders('text/yaml; charset=utf-8', 'clash_sub_hub.yaml'),
+  });
+}
+
+export async function handleMerge(token: string, env: Env): Promise<Response> {
+  const userResult = await resolveUser(token, env);
+  if (userResult.response) return userResult.response;
+
+  const data = await collectSubscriptionData(userResult.user!, env, { includeCachedNodes: false });
+  const mergeConfig = buildMergeConfig(data.customNodes, data.providers);
+
+  return new Response(mergeConfig, {
+    headers: subscriptionHeaders('text/yaml; charset=utf-8', 'merge.yaml'),
   });
 }
 
@@ -69,45 +73,124 @@ interface ProviderInfo {
   exclude?: string;
 }
 
-async function collectAllNodes(user: User, env: Env): Promise<{ nodes: ProxyNode[]; providers: ProviderInfo[] }> {
+type SubscriptionData = {
+  customNodes: ProxyNode[];
+  providers: ProviderInfo[];
+  materializedNodes: ProxyNode[];
+};
+
+async function resolveUser(token: string, env: Env): Promise<{ user?: User; response?: Response }> {
+  const usersRaw = await env.KV.get('users');
+  if (!usersRaw) return { response: new Response('未找到用户', { status: 403 }) };
+
+  const users: User[] = JSON.parse(usersRaw);
+  const user = users.find((u) => u.token === token);
+  if (!user) return { response: new Response('无效的订阅链接', { status: 403 }) };
+  if (!user.enabled) return { response: new Response('订阅已被禁用', { status: 403 }) };
+
+  return { user };
+}
+
+async function collectSubscriptionData(
+  user: User,
+  env: Env,
+  options: { includeCachedNodes: boolean }
+): Promise<SubscriptionData> {
   const upstreamsRaw = await env.KV.get('upstreams');
   let upstreams: Upstream[] = upstreamsRaw ? JSON.parse(upstreamsRaw) : [];
 
-  // 判断是否过滤：用户设置优先，否则跟随全局
   const settings = await getGlobalSettings(env);
   const shouldFilter = user.filterNodes != null ? user.filterNodes : settings.filterEnabled;
 
-  // 按用户权限过滤上游
   if (user.allowedUpstreams != null) {
     upstreams = upstreams.filter((u) => user.allowedUpstreams!.includes(u.name));
   }
 
-  let allNodes: ProxyNode[] = [];
   const providers: ProviderInfo[] = [];
+  const cachedNodes: ProxyNode[] = [];
 
-  // 所有上游都输出为 proxy-providers，由客户端直接拉取最新节点
-  for (const u of upstreams) {
-    const prefix = u.prefix === undefined ? `${u.name} | ` : (u.prefix ? `${u.prefix} | ` : '');
-    providers.push({
-      name: u.name,
-      url: u.url,
-      userAgent: u.userAgent || settings.defaultUA,
+  for (const upstream of upstreams) {
+    const prefix = upstream.prefix === undefined ? `${upstream.name} | ` : (upstream.prefix ? `${upstream.prefix} | ` : '');
+    const provider: ProviderInfo = {
+      name: upstream.name,
+      url: upstream.url,
+      userAgent: upstream.userAgent || settings.defaultUA,
       prefix,
-      exclude: u.exclude,
-    });
+      exclude: upstream.exclude,
+    };
+    providers.push(provider);
+
+    if (!options.includeCachedNodes) continue;
+    const cache = await env.KV.get(`cache:${upstream.name}`);
+    if (!cache) continue;
+
+    let nodes = parseClashYaml(cache);
+    if (shouldFilter) nodes = filterNodes(nodes);
+    nodes = applyProviderExclude(nodes, provider.exclude);
+    cachedNodes.push(...nodes.map((node) => applyProviderPrefix(node, prefix)));
   }
 
-  // 追加自建节点（按用户权限过滤）
+  let customNodes: ProxyNode[] = [];
   const customRaw = await env.KV.get('custom-nodes');
   if (customRaw) {
-    let customNodes: ProxyNode[] = JSON.parse(customRaw);
+    customNodes = JSON.parse(customRaw);
     if (user.allowedCustomNodes != null) {
       customNodes = customNodes.filter((n) => user.allowedCustomNodes!.includes(n.name));
     }
-    allNodes.push(...customNodes);
   }
 
-  return { nodes: deduplicateNodes(allNodes), providers };
+  if (shouldFilter) customNodes = filterNodes(customNodes);
+
+  return {
+    customNodes: deduplicateNodes(customNodes),
+    providers,
+    materializedNodes: deduplicateNodes([...cachedNodes, ...customNodes]),
+  };
+}
+
+function applyProviderExclude(nodes: ProxyNode[], exclude?: string) {
+  if (!exclude) return nodes;
+  try {
+    const re = new RegExp(exclude);
+    return nodes.filter((node) => !re.test(node.name));
+  } catch {
+    return nodes;
+  }
+}
+
+function applyProviderPrefix(node: ProxyNode, prefix: string): ProxyNode {
+  if (!prefix || node.name.startsWith(prefix)) return { ...node };
+  return { ...node, name: `${prefix}${node.name}` };
+}
+
+function buildMergeConfig(customNodes: ProxyNode[], providers: ProviderInfo[]): string {
+  const proxyProviders: Record<string, unknown> = {};
+  for (const p of providers) {
+    const provider: Record<string, unknown> = {
+      type: 'http',
+      url: p.url,
+      interval: 3600,
+      path: `./providers/${p.name}.yaml`,
+      'health-check': {
+        enable: true,
+        interval: 600,
+        url: 'https://www.gstatic.com/generate_204',
+      },
+      header: { 'User-Agent': [p.userAgent, 'Mihomo'] },
+    };
+    if (p.prefix) provider.override = { 'additional-prefix': p.prefix };
+    if (p.exclude) provider['exclude-filter'] = p.exclude;
+    proxyProviders[p.name] = provider;
+  }
+
+  const doc: Record<string, unknown> = {};
+  if (Object.keys(proxyProviders).length > 0) doc['proxy-providers'] = proxyProviders;
+  if (customNodes.length > 0) doc.proxies = customNodes;
+  return yaml.dump(doc, { lineWidth: -1, noRefs: true, quotingType: '"' });
+}
+
+function isMaterializedMode(mode: string | null): boolean {
+  return mode === 'materialized' || mode === 'yaml' || mode === 'direct';
 }
 
 async function buildFullConfig(
@@ -117,7 +200,6 @@ async function buildFullConfig(
 ): Promise<string> {
   const overrideScript = await env.KV.get('script-override') || '';
 
-  // 构建 proxy-providers（本地拉取的上游）
   const proxyProviders: Record<string, unknown> = {};
   for (const p of providers) {
     const provider: Record<string, unknown> = {
@@ -149,15 +231,13 @@ async function buildFullConfig(
     rules: [],
   };
 
-  // 执行内置脚本（静态导入，不需要 new Function）
   try {
-    const result = builtinScript(config);
+    const result = runBuiltinScript(config);
     if (result && typeof result === 'object') config = result;
   } catch (e) {
     console.error('内置脚本执行失败:', e);
   }
 
-  // 执行自定义追加脚本（需要 new Function，免费版可能不可用）
   if (overrideScript) {
     try {
       const result = executeScript(overrideScript, config);
@@ -167,40 +247,48 @@ async function buildFullConfig(
     }
   }
 
-  // 脚本执行后，把 proxies 里的节点名注入到带 use 的分组
-  // （脚本设计给 Clash Verge 本地用，依赖 proxy-providers 获取机场节点；
-  //   Hub 把节点直接放在 proxies 里，需要补充到分组的 proxies 字段）
-  const allProxyNames = (config.proxies as ProxyNode[]).map((p) => p.name);
-  const groups = config['proxy-groups'] as Record<string, unknown>[] | undefined;
-  if (groups && Array.isArray(groups) && allProxyNames.length > 0) {
-    for (const group of groups) {
-      if (!group.use) continue; // 只处理引用了 proxy-providers 的分组
-      const existing = (group.proxies as string[]) || [];
-      const filter = group.filter as string | undefined;
-      let namesToAdd = allProxyNames;
-      if (filter) {
-        try {
-          const re = new RegExp(filter);
-          namesToAdd = namesToAdd.filter((n) => re.test(n));
-        } catch { /* 无效正则，跳过过滤 */ }
-      }
-      group.proxies = [...new Set([...existing, ...namesToAdd])];
-    }
-  }
+  injectMaterializedNodesIntoProviderGroups(config);
 
   return yaml.dump(config, { lineWidth: -1, noRefs: true });
+}
+
+function injectMaterializedNodesIntoProviderGroups(config: Record<string, unknown>) {
+  const allProxyNames = ((config.proxies as ProxyNode[]) || []).map((p) => p.name);
+  const groups = config['proxy-groups'] as Record<string, unknown>[] | undefined;
+  if (!groups || !Array.isArray(groups) || allProxyNames.length === 0) return;
+
+  for (const group of groups) {
+    if (!('use' in group)) continue;
+    const existing = (group.proxies as string[]) || [];
+    const filter = group.filter as string | undefined;
+    let namesToAdd = allProxyNames;
+    if (filter) {
+      try {
+        const re = new RegExp(filter);
+        namesToAdd = namesToAdd.filter((n) => re.test(n));
+      } catch { /* 无效正则，跳过过滤 */ }
+    }
+    group.proxies = [...new Set([...existing, ...namesToAdd])];
+  }
+}
+
+function subscriptionHeaders(contentType: string, filename: string): Record<string, string> {
+  return {
+    'Content-Type': contentType,
+    'Content-Disposition': `attachment; filename=${filename}`,
+    'Profile-Update-Interval': '1',
+    'Cache-Control': 'no-store',
+  };
 }
 
 function executeScript(
   scriptText: string,
   config: Record<string, unknown>
 ): Record<string, unknown> | null {
-  // 用 Function 构造器创建沙箱执行环境
-  // 管理员脚本格式: function main(config) { ... return config; }
-  // 我们提取 main 函数并执行
   const fn = new Function(
     'config',
-    `${scriptText};\nif (typeof main === 'function') return main(config); return config;`
+    `${scriptText};
+if (typeof main === 'function') return main(config); return config;`
   );
   const result = fn(config);
   return result && typeof result === 'object' ? result : null;

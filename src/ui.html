@@ -441,7 +441,9 @@ async function loadUsers() {
         ? '<span class="text-green-600">启用</span>'
         : '<span class="text-red-500">禁用</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="copySubUrl('${esc(u.token)}', 'full')" class="text-blue-500 hover:underline text-xs">完整配置</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'full')" class="text-blue-500 hover:underline text-xs">Provider配置</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'materialized')" class="text-emerald-600 hover:underline text-xs">直连YAML</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'merge')" class="text-orange-500 hover:underline text-xs">Merge</button>
         <button onclick="copySubUrl('${esc(u.token)}', 'nodes')" class="text-teal-500 hover:underline text-xs">纯节点</button>
         <button onclick="copySubUrl('${esc(u.token)}', 'script')" class="text-purple-500 hover:underline text-xs">仅脚本</button>
       </td>
@@ -466,12 +468,18 @@ function copySubUrl(token, mode) {
   if (mode === 'script') {
     url = `${BASE}/script.js`;
     msg = '脚本链接已复制';
+  } else if (mode === 'merge') {
+    url = `${BASE}/merge/${token}`;
+    msg = 'Merge 覆写链接已复制';
+  } else if (mode === 'materialized') {
+    url = `${BASE}/sub/${token}?mode=materialized`;
+    msg = '直连 YAML 链接已复制';
   } else if (mode === 'nodes') {
     url = `${BASE}/sub/${token}?mode=nodes`;
     msg = '纯节点链接已复制';
   } else {
     url = `${BASE}/sub/${token}`;
-    msg = '完整配置链接已复制';
+    msg = 'Provider 配置链接已复制';
   }
   navigator.clipboard.writeText(url);
   toast(msg);

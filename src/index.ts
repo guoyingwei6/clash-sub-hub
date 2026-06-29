@@ -1,6 +1,6 @@
 import { Env } from './types';
 import { checkAdmin, unauthorized } from './auth';
-import { handleSubscription } from './subscription';
+import { handleMerge, handleSubscription } from './subscription';
 import { handleScheduled } from './cron';
 import { builtinScriptContent } from './generated/script-content';
 import {
@@ -32,6 +32,12 @@ export default {
       const format = url.searchParams.get('format');
       const mode = url.searchParams.get('mode');
       return handleSubscription(subMatch[1], format, mode, env);
+    }
+
+    // 公开接口：Clash Verge Merge 覆写配置
+    const mergeMatch = path.match(/^\/merge\/([^/]+)$/);
+    if (mergeMatch) {
+      return handleMerge(mergeMatch[1], env);
     }
 
     // 公开接口：全局扩展脚本（KV override 优先，否则返回内置版本）

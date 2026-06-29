@@ -317,7 +317,11 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/sub/:token` | GET | 获取订阅配置 (`?format=base64` 切换格式) |
+| `/sub/:token` | GET | 获取 Provider 模式完整配置，保留 Clash Verge 高级玩法 |
+| `/sub/:token?mode=materialized` | GET | 获取已物化完整 Mihomo YAML，不需要 Clash Verge Merge 覆写 |
+| `/sub/:token?mode=nodes` | GET | 获取已物化纯节点 YAML |
+| `/sub/:token?format=base64` | GET | 获取已物化 URI Base64 订阅 |
+| `/merge/:token` | GET | 获取 Clash Verge 全局 Merge 覆写配置 |
 | `/script.js` | GET | 获取基础扩展脚本 |
 | `/admin` | GET | 管理后台 |
 | `/api/users` | GET/POST | 用户管理 |
@@ -327,6 +331,12 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 | `/api/refresh` | POST | 手动刷新所有上游 |
 | `/api/import/merge` | POST | 导入 Merge YAML |
 | `/api/export/merge` | GET | 导出 Merge YAML |
+
+### 输出模式
+
+- **Provider 配置**：`/sub/:token` 输出 `proxy-providers` + 自建节点 + 脚本生成的规则和分组，适合继续使用 Clash Verge 高级模式。
+- **直连 YAML**：`/sub/:token?mode=materialized` 使用 Worker 已缓存的上游节点和自建节点生成完整 Mihomo YAML，Clash Verge 只需导入一个订阅链接，不需要 Merge 覆写。
+- **Merge 覆写**：`/merge/:token` 只输出 `proxy-providers` 和 `proxies`，适合配合空 Profile Template 与全局扩展脚本使用。
 
 ### 部署步骤
 
