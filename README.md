@@ -13,6 +13,18 @@
 
 ---
 
+## 更新记录
+
+### 2026-06-29
+
+- 新增 `/sub/:token?mode=materialized`，由 Worker 直接输出已物化完整 Mihomo YAML，Clash Verge 可只导入一个订阅链接，不再依赖本地 Merge 覆写。
+- 新增 `/merge/:token`，继续支持空 Profile Template + 全局扩展脚本 + Merge 覆写的高级用法。
+- 恢复 Cloudflare Workers 线上部署，改为 GitHub Actions 连接 GitHub 自动构建和部署；推送到 `main` 后会自动触发部署。
+- 去掉 Cloudflare Cron Triggers，避免占用账号 Cron 配额；上游订阅和基础脚本改为管理后台手动刷新/同步。
+- 重做 `/admin` 管理后台 UI：新增侧边导航、顶部操作栏、统计摘要、统一按钮/状态标签/表格/弹窗样式，并适配移动端。
+
+---
+
 ## 整体架构：多层冗余翻墙体系
 
 ```mermaid
@@ -297,11 +309,11 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 ### 功能特性
 
 - **多用户管理**：自定义 token 创建用户，每人独立订阅链接，随时启用/禁用
-- **上游订阅聚合**：支持添加多个机场订阅，定时缓存（每小时 Cron 自动刷新）
+- **上游订阅聚合**：支持添加多个机场订阅，Worker 缓存节点，管理后台可手动刷新
 - **自建节点管理**：YAML 格式添加/编辑自建节点，支持 TCP 连通性测试
 - **完整配置输出**：服务端执行扩展脚本，输出带完整分流规则的 Clash 配置
 - **Base64 格式**：`?format=base64` 输出 URI 列表，兼容 Shadowrocket 等客户端
-- **脚本分层管理**：基础脚本（外部链接自动同步）+ 自定义追加脚本（不被覆盖）
+- **脚本分层管理**：基础脚本（外部链接手动同步）+ 自定义追加脚本（不被覆盖）
 - **导入导出**：支持 Merge YAML 导入导出，一键迁移机场订阅和自建节点
 - **管理后台**：Web UI 管理界面，CodeMirror 代码编辑器
 
@@ -309,9 +321,8 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 
 - **Runtime**: Cloudflare Workers
 - **存储**: Cloudflare KV
-- **定时任务**: Cron Triggers (每小时)
 - **前端**: Tailwind CSS + CodeMirror 5
-- **部署**: Wrangler CLI
+- **部署**: GitHub Actions + Wrangler CLI
 
 ### API 端点
 
@@ -358,7 +369,11 @@ npx wrangler secret put ADMIN_PASSWORD
 # 5. 部署
 npx wrangler deploy
 
-# 6. (可选) 绑定自定义域名
+# 6. GitHub Actions 自动部署
+# 设置 GitHub Secrets: CLOUDFLARE_ACCOUNT_ID、CLOUDFLARE_API_TOKEN、ADMIN_PASSWORD
+# 推送到 main 后自动构建并部署 Worker
+
+# 7. (可选) 绑定自定义域名
 # 在 Cloudflare Dashboard → Workers → 自定义域名
 ```
 
