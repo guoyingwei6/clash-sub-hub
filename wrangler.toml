@@ -2,9 +2,8 @@ name = "clash-sub-hub"
 main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
+routes = [{ pattern = "clash.guoyingwei.top", custom_domain = true }]
 
-[triggers]
-crons = ["0 2 * * *"]
 
 [[kv_namespaces]]
 binding = "KV"
