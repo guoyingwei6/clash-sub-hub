@@ -7,7 +7,8 @@ const path = require('path');
 
 const root = path.resolve(__dirname, '..');
 const src = path.join(root, 'ClashVerge-AI-Academic-Enhanced.js');
-const dest = path.join(root, 'src', 'generated', 'script-content.ts');
+const destDir = path.join(root, 'src', 'generated');
+const dest = path.join(destDir, 'script-content.ts');
 
 const content = fs.readFileSync(src, 'utf-8');
 // JSON.stringify 保证所有特殊字符（包括反引号、${}）都被正确转义
@@ -16,5 +17,6 @@ const ts = `// 自动生成 - 请勿手动修改。源文件: ClashVerge-AI-Acad
 export const builtinScriptContent: string = ${JSON.stringify(content)};
 `;
 
+fs.mkdirSync(destDir, { recursive: true });
 fs.writeFileSync(dest, ts, 'utf-8');
 console.log(`[generate-script-content] 已写入 ${path.relative(root, dest)} (${content.length} 字节)`);
