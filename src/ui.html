@@ -12,11 +12,202 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/javascript/javascript.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
-  .tab-active { border-bottom: 2px solid #3b82f6; color: #3b82f6; font-weight: 600; }
-  .toast { position: fixed; top: 20px; right: 20px; z-index: 999; transition: opacity 0.3s; }
-  .CodeMirror { height: 500px; border: 1px solid #e5e7eb; border-radius: 0.5rem; font-size: 13px; }
+  :root {
+    --bg: #f6f8fb;
+    --panel: #ffffff;
+    --line: #d9e1ec;
+    --muted: #64748b;
+    --text: #0f172a;
+    --blue: #2563eb;
+    --blue-soft: #eff6ff;
+    --green: #059669;
+    --green-soft: #ecfdf5;
+    --amber: #d97706;
+    --amber-soft: #fffbeb;
+    --red: #dc2626;
+    --red-soft: #fef2f2;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background:
+      linear-gradient(180deg, rgba(37, 99, 235, 0.08), transparent 240px),
+      var(--bg);
+    color: var(--text);
+  }
+  button, input, textarea { transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease; }
+  button:active { transform: translateY(1px); }
+  input, textarea {
+    border-color: var(--line) !important;
+    background: #fff;
+  }
+  input:focus, textarea:focus {
+    outline: none;
+    border-color: #93c5fd !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  }
+  .toast {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 999;
+    transition: opacity 0.3s, transform 0.3s;
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.18);
+  }
+  .app-shell {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    min-height: 100vh;
+  }
+  .sidebar {
+    background: rgba(255, 255, 255, 0.84);
+    border-right: 1px solid var(--line);
+    backdrop-filter: blur(16px);
+  }
+  .sidebar-brand {
+    border-bottom: 1px solid var(--line);
+  }
+  .tab-btn {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: #475569;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .tab-btn:hover {
+    background: #f8fafc;
+    color: var(--blue);
+  }
+  .tab-active {
+    background: var(--blue-soft);
+    border-color: #bfdbfe;
+    color: var(--blue);
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+  .main-pane {
+    min-width: 0;
+    padding: 22px 26px 34px;
+  }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+  }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+  }
+  .panel-pad { padding: 18px; }
+  .panel-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .subtle { color: var(--muted); }
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    padding: 8px 12px;
+    min-height: 36px;
+    font-size: 13px;
+    font-weight: 650;
+    white-space: nowrap;
+  }
+  .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2); }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-muted { background: #f8fafc; border-color: var(--line); color: #334155; }
+  .btn-muted:hover { background: #eef2f7; }
+  .btn-success { background: var(--green); color: #fff; box-shadow: 0 6px 14px rgba(5, 150, 105, 0.18); }
+  .btn-success:hover { background: #047857; }
+  .btn-warning { background: var(--amber); color: #fff; }
+  .btn-warning:hover { background: #b45309; }
+  .btn-danger { background: var(--red-soft); border-color: #fecaca; color: var(--red); }
+  .btn-danger:hover { background: #fee2e2; }
+  .btn-link { color: var(--blue); font-size: 13px; font-weight: 650; }
+  .btn-link:hover { color: #1d4ed8; text-decoration: underline; }
+  .btn-link.green { color: var(--green); }
+  .btn-link.amber { color: var(--amber); }
+  .btn-link.red { color: var(--red); }
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    padding: 3px 9px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1.4;
+  }
+  .status-ok { background: var(--green-soft); border-color: #bbf7d0; color: var(--green); }
+  .status-warn { background: var(--amber-soft); border-color: #fde68a; color: var(--amber); }
+  .status-error { background: var(--red-soft); border-color: #fecaca; color: var(--red); }
+  .status-muted { background: #f8fafc; border-color: var(--line); color: var(--muted); }
+  .metric-card {
+    min-height: 86px;
+    padding: 16px;
+  }
+  .metric-value {
+    font-size: 26px;
+    line-height: 1;
+    font-weight: 800;
+    letter-spacing: 0;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  table { min-width: 760px; }
+  thead {
+    background: #f8fafc;
+    color: #475569;
+    border-bottom: 1px solid var(--line);
+  }
+  th {
+    font-size: 12px;
+    font-weight: 750;
+    text-transform: uppercase;
+    letter-spacing: 0;
+  }
+  tbody tr {
+    border-top: 1px solid #eef2f7;
+  }
+  tbody tr:hover {
+    background: #f8fbff;
+  }
+  .modal-card {
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+  }
+  .CodeMirror { height: 500px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
   .cm-base .CodeMirror { height: 500px; }
+  @media (max-width: 900px) {
+    .app-shell { grid-template-columns: 1fr; }
+    .sidebar { position: sticky; top: 0; z-index: 20; border-right: 0; border-bottom: 1px solid var(--line); }
+    .sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .tab-btn { justify-content: center; padding: 9px 6px; font-size: 12px; }
+    .nav-count { display: none; }
+    .main-pane { padding: 16px; }
+    .topbar { align-items: flex-start; flex-direction: column; }
+    .topbar > div:last-child { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+  }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -26,16 +217,16 @@
 
 <!-- User Edit Modal -->
 <div id="user-edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
-    <h3 class="font-semibold mb-4">用户管理: <span id="ue-name" class="text-blue-600"></span></h3>
+  <div class="modal-card p-6 w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto">
+    <h3 class="panel-title mb-4">用户管理: <span id="ue-name" class="text-blue-600"></span></h3>
 
     <!-- 订阅链接 -->
     <div class="mb-4">
       <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
       <div class="flex gap-2">
-        <button onclick="copySubUrl(_ueToken, 'full')" class="flex-1 bg-blue-50 border border-blue-200 text-blue-600 px-3 py-2 rounded text-sm hover:bg-blue-100">复制完整配置链接</button>
-        <button onclick="copySubUrl(_ueToken, 'nodes')" class="flex-1 bg-teal-50 border border-teal-200 text-teal-600 px-3 py-2 rounded text-sm hover:bg-teal-100">复制纯节点链接</button>
-        <button onclick="copySubUrl(_ueToken, 'script')" class="flex-1 bg-purple-50 border border-purple-200 text-purple-600 px-3 py-2 rounded text-sm hover:bg-purple-100">复制脚本链接</button>
+        <button onclick="copySubUrl(_ueToken, 'full')" class="btn btn-muted flex-1">Provider</button>
+        <button onclick="copySubUrl(_ueToken, 'materialized')" class="btn btn-primary flex-1">直连 YAML</button>
+        <button onclick="copySubUrl(_ueToken, 'merge')" class="btn btn-muted flex-1">Merge</button>
       </div>
     </div>
 
@@ -78,10 +269,10 @@
 
     <!-- 操作按钮 -->
     <div class="flex justify-between mt-4">
-      <button onclick="delUserFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除用户</button>
+      <button onclick="delUserFromModal()" class="btn btn-danger">删除用户</button>
       <div class="flex gap-2">
-        <button onclick="closeUserEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
-        <button onclick="saveUserEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+        <button onclick="closeUserEditModal()" class="btn btn-muted">取消</button>
+        <button onclick="saveUserEdit()" class="btn btn-primary">保存</button>
       </div>
     </div>
   </div>
@@ -89,8 +280,8 @@
 
 <!-- Edit Upstream Modal -->
 <div id="edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-lg mx-4">
-    <h3 class="font-semibold mb-4">编辑订阅: <span id="edit-name" class="text-blue-600"></span></h3>
+  <div class="modal-card p-6 w-full max-w-lg mx-4">
+    <h3 class="panel-title mb-4">编辑订阅: <span id="edit-name" class="text-blue-600"></span></h3>
     <div class="space-y-3">
       <div>
         <label class="block text-sm text-gray-600 mb-1">订阅 URL</label>
@@ -120,11 +311,11 @@
       </div>
     </div>
     <div class="flex justify-between mt-4">
-      <button onclick="delUpstreamFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除订阅</button>
+      <button onclick="delUpstreamFromModal()" class="btn btn-danger">删除订阅</button>
       <div class="flex gap-2">
-        <button onclick="testEditUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-        <button onclick="closeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
-        <button onclick="saveUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+        <button onclick="testEditUpstream()" class="btn btn-warning">测试</button>
+        <button onclick="closeEditModal()" class="btn btn-muted">取消</button>
+        <button onclick="saveUpstream()" class="btn btn-primary">保存</button>
       </div>
     </div>
     <div id="edit-test-result" class="mt-2 text-sm hidden"></div>
@@ -133,15 +324,15 @@
 
 <!-- Edit Node Modal -->
 <div id="node-edit-modal" class="hidden fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-  <div class="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl mx-4">
-    <h3 class="font-semibold mb-4">编辑节点: <span id="node-edit-name" class="text-blue-600"></span></h3>
+  <div class="modal-card p-6 w-full max-w-2xl mx-4">
+    <h3 class="panel-title mb-4">编辑节点: <span id="node-edit-name" class="text-blue-600"></span></h3>
     <textarea id="node-edit-yaml" rows="16" class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
     <div class="flex justify-between mt-4">
-      <button onclick="delNodeFromModal()" class="bg-red-50 text-red-500 px-4 py-2 rounded text-sm hover:bg-red-100">删除节点</button>
+      <button onclick="delNodeFromModal()" class="btn btn-danger">删除节点</button>
       <div class="flex gap-2">
-        <button onclick="testNodeInModal()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-        <button onclick="closeNodeEditModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300">取消</button>
-        <button onclick="saveNodeEdit()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">保存</button>
+        <button onclick="testNodeInModal()" class="btn btn-warning">测试</button>
+        <button onclick="closeNodeEditModal()" class="btn btn-muted">取消</button>
+        <button onclick="saveNodeEdit()" class="btn btn-primary">保存</button>
       </div>
     </div>
     <div id="node-edit-test-result" class="mt-2 text-sm hidden"></div>
@@ -149,42 +340,95 @@
 </div>
 
 <!-- Login -->
-<div id="login-page" class="flex items-center justify-center min-h-screen">
-  <div class="bg-white p-8 rounded-lg shadow-md w-80">
-    <h1 class="text-xl font-bold mb-6 text-center">Clash Sub Hub</h1>
+<div id="login-page" class="flex items-center justify-center min-h-screen px-4">
+  <div class="panel w-full max-w-sm overflow-hidden">
+    <div class="px-7 pt-7 pb-5 border-b border-slate-200">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black">C</div>
+        <div>
+          <h1 class="text-lg font-extrabold">Clash Sub Hub</h1>
+          <p class="text-xs subtle mt-1">订阅聚合与配置管理</p>
+        </div>
+      </div>
+    </div>
+    <div class="p-7">
     <input id="password-input" type="password" placeholder="管理密码"
-      class="w-full px-3 py-2 border rounded mb-4 focus:outline-none focus:ring-2 focus:ring-blue-400"
+      class="w-full px-3 py-2.5 border rounded-md mb-4 text-sm"
       onkeydown="if(event.key==='Enter')login()">
-    <button onclick="login()" class="w-full bg-blue-500 text-white py-2 rounded hover:bg-blue-600">登录</button>
+    <button onclick="login()" class="btn btn-primary w-full">登录管理后台</button>
+    </div>
   </div>
 </div>
 
 <!-- Dashboard -->
-<div id="dashboard" class="hidden max-w-6xl mx-auto p-4">
-  <div class="flex items-center justify-between mb-6">
-    <h1 class="text-xl font-bold">Clash Sub Hub</h1>
-    <button onclick="logout()" class="text-sm text-gray-500 hover:text-red-500">退出</button>
-  </div>
+<div id="dashboard" class="hidden app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand p-5">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black">C</div>
+        <div class="min-w-0">
+          <h1 class="font-extrabold leading-tight">Clash Sub Hub</h1>
+          <p class="text-xs subtle mt-1">Cloudflare Worker</p>
+        </div>
+      </div>
+      <div class="mt-4 flex items-center justify-between text-xs">
+        <span class="status-pill status-ok">在线</span>
+        <button onclick="logout()" class="btn-link red">退出</button>
+      </div>
+    </div>
+    <nav class="p-3 space-y-1">
+      <button class="tab-btn tab-active" data-tab="users"><span>用户</span><span class="nav-count ml-auto text-xs subtle" id="nav-users-count">0</span></button>
+      <button class="tab-btn" data-tab="upstreams"><span>上游</span><span class="nav-count ml-auto text-xs subtle" id="nav-upstreams-count">0</span></button>
+      <button class="tab-btn" data-tab="nodes"><span>自建</span><span class="nav-count ml-auto text-xs subtle" id="nav-nodes-count">0</span></button>
+      <button class="tab-btn" data-tab="script"><span>脚本</span><span class="nav-count ml-auto text-xs subtle">JS</span></button>
+    </nav>
+  </aside>
 
-  <!-- Tabs -->
-  <div class="flex border-b mb-6 gap-6">
-    <button class="tab-btn pb-2 tab-active" data-tab="users">用户管理</button>
-    <button class="tab-btn pb-2" data-tab="upstreams">上游订阅</button>
-    <button class="tab-btn pb-2" data-tab="nodes">自建节点</button>
-    <button class="tab-btn pb-2" data-tab="script">扩展脚本</button>
-  </div>
+  <main class="main-pane">
+    <div class="topbar">
+      <div>
+        <p class="text-xs font-bold subtle uppercase tracking-normal">Admin Console</p>
+        <h2 id="section-title" class="text-2xl font-extrabold mt-1">用户管理</h2>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="refreshAllData()" class="btn btn-muted">刷新数据</button>
+        <button onclick="copyScriptUrl()" class="btn btn-muted">复制脚本</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+      <div class="panel metric-card">
+        <p class="text-xs font-bold subtle">用户</p>
+        <div id="stat-users" class="metric-value mt-3">0</div>
+      </div>
+      <div class="panel metric-card">
+        <p class="text-xs font-bold subtle">上游订阅</p>
+        <div id="stat-upstreams" class="metric-value mt-3">0</div>
+      </div>
+      <div class="panel metric-card">
+        <p class="text-xs font-bold subtle">缓存节点</p>
+        <div id="stat-upstream-nodes" class="metric-value mt-3">0</div>
+      </div>
+      <div class="panel metric-card">
+        <p class="text-xs font-bold subtle">自建节点</p>
+        <div id="stat-nodes" class="metric-value mt-3">0</div>
+      </div>
+    </div>
 
   <!-- ==================== 用户管理 Tab ==================== -->
   <div id="tab-users" class="tab-panel">
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
-      <h3 class="font-semibold mb-3">添加用户</h3>
-      <div class="flex gap-2">
+    <div class="panel panel-pad mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="panel-title">添加用户</h3>
+        <span class="text-xs subtle">每个 Token 对应一套可控订阅入口</span>
+      </div>
+      <div class="flex gap-2 flex-wrap">
         <input id="new-user-token" placeholder="Token (自定义)" class="flex-1 px-3 py-2 border rounded text-sm">
         <input id="new-user-name" placeholder="备注名" class="flex-1 px-3 py-2 border rounded text-sm">
-        <button onclick="addUser()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">添加</button>
+        <button onclick="addUser()" class="btn btn-primary">添加用户</button>
       </div>
     </div>
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="panel table-wrap">
       <table class="w-full text-sm">
         <thead class="bg-gray-50">
           <tr>
@@ -203,10 +447,10 @@
   <!-- ==================== 上游订阅 Tab ==================== -->
   <div id="tab-upstreams" class="tab-panel hidden">
     <!-- 全局默认设置 -->
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
+    <div class="panel panel-pad mb-4">
       <div class="flex items-center justify-between cursor-pointer" onclick="document.getElementById('global-settings-body').classList.toggle('hidden')">
-        <h3 class="font-semibold">全局默认设置</h3>
-        <span class="text-gray-400 text-xs">点击展开/收起</span>
+        <h3 class="panel-title">全局默认设置</h3>
+        <span class="text-gray-400 text-xs">展开/收起</span>
       </div>
       <div id="global-settings-body" class="hidden mt-3 space-y-3">
         <div>
@@ -227,31 +471,31 @@
             <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
           </label>
         </div>
-        <button onclick="saveGlobalSettings()" class="bg-blue-500 text-white px-3 py-1.5 rounded text-sm hover:bg-blue-600">保存设置</button>
+        <button onclick="saveGlobalSettings()" class="btn btn-primary">保存设置</button>
       </div>
     </div>
 
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
-      <h3 class="font-semibold mb-3">添加上游订阅</h3>
+    <div class="panel panel-pad mb-4">
+      <h3 class="panel-title mb-3">添加上游订阅</h3>
       <div class="flex gap-2 mb-2">
         <input id="new-up-name" placeholder="名称" class="w-32 px-3 py-2 border rounded text-sm">
         <input id="new-up-url" placeholder="订阅 URL" class="flex-1 px-3 py-2 border rounded text-sm">
       </div>
       <div class="flex gap-2">
-        <button onclick="testNewUpstream()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-        <button onclick="addUpstream()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">导入</button>
+        <button onclick="testNewUpstream()" class="btn btn-warning">测试</button>
+        <button onclick="addUpstream()" class="btn btn-primary">导入</button>
         <div class="ml-auto flex gap-2">
-          <label class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200">
+          <label class="btn btn-muted cursor-pointer">
             导入 Merge
             <input type="file" accept=".yaml,.yml" class="hidden" onchange="importMergeFile(this)">
           </label>
-          <button onclick="exportMergeFile()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出 Merge</button>
-          <button onclick="refreshAllUpstreams()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">刷新全部</button>
+          <button onclick="exportMergeFile()" class="btn btn-muted">导出 Merge</button>
+          <button onclick="refreshAllUpstreams()" class="btn btn-success">刷新全部</button>
         </div>
       </div>
       <div id="test-result" class="mt-2 text-sm hidden"></div>
     </div>
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="panel table-wrap">
       <table class="w-full text-sm">
         <thead class="bg-gray-50">
           <tr>
@@ -270,8 +514,8 @@
 
   <!-- ==================== 自建节点 Tab ==================== -->
   <div id="tab-nodes" class="tab-panel hidden">
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
-      <h3 class="font-semibold mb-3">添加自建节点 (YAML 格式)</h3>
+    <div class="panel panel-pad mb-4">
+      <h3 class="panel-title mb-3">添加自建节点 (YAML 格式)</h3>
       <textarea id="new-node-yaml" rows="8" placeholder="name: 自建-Reality
 type: vless
 server: 1.2.3.4
@@ -279,13 +523,13 @@ port: 443
 uuid: xxx
 ..." class="w-full px-3 py-2 border rounded text-sm font-mono"></textarea>
       <div class="flex gap-2 mt-2">
-        <button onclick="testNewNode()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">测试</button>
-        <button onclick="addNode()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">添加</button>
-        <button onclick="testAllNodes()" class="ml-auto bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">全部测试</button>
+        <button onclick="testNewNode()" class="btn btn-warning">测试</button>
+        <button onclick="addNode()" class="btn btn-primary">添加</button>
+        <button onclick="testAllNodes()" class="ml-auto btn btn-success">全部测试</button>
       </div>
       <div id="node-test-result" class="mt-2 text-sm hidden"></div>
     </div>
-    <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="panel table-wrap">
       <table class="w-full text-sm">
         <thead class="bg-gray-50">
           <tr>
@@ -305,42 +549,42 @@ uuid: xxx
   <!-- ==================== 扩展脚本 Tab ==================== -->
   <div id="tab-script" class="tab-panel hidden">
     <!-- 基础脚本 (来自外部链接) -->
-    <div class="bg-white rounded-lg shadow p-4 mb-4">
+    <div class="panel panel-pad mb-4">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold">基础脚本 (来自外部链接)</h3>
+        <h3 class="panel-title">基础脚本 (来自外部链接)</h3>
         <div class="flex gap-2 items-center">
-          <button onclick="copyScriptUrl()" class="text-sm text-blue-500 hover:text-blue-700">复制脚本链接</button>
-          <label class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm cursor-pointer hover:bg-gray-200">
+          <button onclick="copyScriptUrl()" class="btn btn-muted">复制脚本链接</button>
+          <label class="btn btn-muted cursor-pointer">
             导入脚本
             <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
           </label>
-          <button onclick="exportBaseScript()" class="bg-gray-100 text-gray-700 px-3 py-2 rounded text-sm hover:bg-gray-200">导出脚本</button>
+          <button onclick="exportBaseScript()" class="btn btn-muted">导出脚本</button>
         </div>
       </div>
       <div class="flex gap-2 mb-3 items-center">
         <input id="script-url" placeholder="外部脚本 URL (如 GitHub raw 链接)" class="flex-1 px-3 py-2 border rounded text-sm font-mono">
-        <button onclick="syncScriptFromUrl()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600 whitespace-nowrap">同步</button>
-        <button onclick="saveScriptUrl()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 whitespace-nowrap">保存链接</button>
+        <button onclick="syncScriptFromUrl()" class="btn btn-success">同步</button>
+        <button onclick="saveScriptUrl()" class="btn btn-primary">保存链接</button>
       </div>
-      <p class="text-xs text-gray-400 mb-3">Cron 每小时自动同步基础脚本，不会覆盖下方的自定义脚本。</p>
-      <button onclick="toggleBaseScript()" class="text-sm text-gray-600 hover:text-blue-500 mb-2" id="btn-toggle-base">
+      <p class="text-xs text-gray-400 mb-3">基础脚本现在按需手动同步，不会覆盖下方的自定义追加脚本。</p>
+      <button onclick="toggleBaseScript()" class="btn-link mb-2" id="btn-toggle-base">
         ▶ 查看基础脚本内容
       </button>
       <div id="base-script-wrap" class="hidden cm-base"></div>
     </div>
 
     <!-- 自定义追加脚本 -->
-    <div class="bg-white rounded-lg shadow p-4">
+    <div class="panel panel-pad">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="font-semibold">自定义追加脚本</h3>
+        <h3 class="panel-title">自定义追加脚本</h3>
         <div class="flex gap-2 items-center">
-          <button id="btn-edit-script" onclick="toggleEditScript()" class="bg-yellow-500 text-white px-4 py-2 rounded text-sm hover:bg-yellow-600">编辑</button>
-          <button id="btn-save-script" onclick="saveScript()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600 hidden">保存</button>
-          <button id="btn-cancel-script" onclick="cancelEditScript()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-300 hidden">取消</button>
+          <button id="btn-edit-script" onclick="toggleEditScript()" class="btn btn-warning">编辑</button>
+          <button id="btn-save-script" onclick="saveScript()" class="btn btn-primary hidden">保存</button>
+          <button id="btn-cancel-script" onclick="cancelEditScript()" class="btn btn-muted hidden">取消</button>
         </div>
       </div>
       <p class="text-xs text-gray-400 mb-3">执行顺序：基础脚本 → 自定义脚本。自定义脚本不会被外部同步覆盖。</p>
-      <button onclick="toggleOverrideScript()" class="text-sm text-gray-600 hover:text-blue-500 mb-2" id="btn-toggle-override">
+      <button onclick="toggleOverrideScript()" class="btn-link mb-2" id="btn-toggle-override">
         ▶ 查看自定义脚本内容
       </button>
       <div id="override-script-wrap" class="hidden">
@@ -348,6 +592,7 @@ uuid: xxx
       </div>
     </div>
   </div>
+  </main>
 </div>
 
 <script>
@@ -409,13 +654,46 @@ function toast(msg, ok = true) {
   setTimeout(() => el.classList.add('hidden'), 2500);
 }
 
+function setText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function updateStats() {
+  const userCount = _usersData.length || 0;
+  const upstreamCount = _upstreamsData.length || 0;
+  const upstreamNodeCount = _upstreamsData.reduce((sum, u) => sum + (Number(u.nodeCount) || 0), 0);
+  const nodeCount = _nodesData.length || 0;
+  setText('stat-users', userCount);
+  setText('stat-upstreams', upstreamCount);
+  setText('stat-upstream-nodes', upstreamNodeCount);
+  setText('stat-nodes', nodeCount);
+  setText('nav-users-count', userCount);
+  setText('nav-upstreams-count', upstreamCount);
+  setText('nav-nodes-count', nodeCount);
+}
+
+async function refreshAllData() {
+  toast('刷新数据中...');
+  await Promise.all([loadUsers(), loadGlobalSettings(), loadUpstreams(), loadNodes(), loadScriptUrl()]);
+  toast('数据已刷新');
+}
+
 // ==================== Tabs ====================
+const TAB_TITLES = {
+  users: '用户管理',
+  upstreams: '上游订阅',
+  nodes: '自建节点',
+  script: '扩展脚本',
+};
+
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('tab-active'));
     document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
     btn.classList.add('tab-active');
     document.getElementById(`tab-${btn.dataset.tab}`).classList.remove('hidden');
+    setText('section-title', TAB_TITLES[btn.dataset.tab] || '管理后台');
     localStorage.setItem('active_tab', btn.dataset.tab);
     if (btn.dataset.tab === 'script') {
       if (_cmOverride) setTimeout(() => _cmOverride.refresh(), 0);
@@ -431,24 +709,25 @@ let _ueToken = '';
 async function loadUsers() {
   const { data } = await api('/api/users');
   const tbody = document.getElementById('users-table');
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-3 text-gray-400 text-center">暂无用户</td></tr>'; return; }
-  _usersData = data;
+  _usersData = data || [];
+  updateStats();
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-gray-400 text-center">暂无用户</td></tr>'; return; }
   tbody.innerHTML = data.map(u => `
-    <tr class="border-t">
+    <tr>
       <td class="px-4 py-3 font-mono text-xs">${esc(u.token)}</td>
       <td class="px-4 py-3">${esc(u.name)}</td>
       <td class="px-4 py-3">${u.enabled
-        ? '<span class="text-green-600">启用</span>'
-        : '<span class="text-red-500">禁用</span>'}</td>
+        ? '<span class="status-pill status-ok">启用</span>'
+        : '<span class="status-pill status-error">禁用</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="copySubUrl('${esc(u.token)}', 'full')" class="text-blue-500 hover:underline text-xs">Provider配置</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'materialized')" class="text-emerald-600 hover:underline text-xs">直连YAML</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'merge')" class="text-orange-500 hover:underline text-xs">Merge</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'nodes')" class="text-teal-500 hover:underline text-xs">纯节点</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'script')" class="text-purple-500 hover:underline text-xs">仅脚本</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'full')" class="btn-link">Provider</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'materialized')" class="btn-link green">直连YAML</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'merge')" class="btn-link amber">Merge</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'nodes')" class="btn-link">纯节点</button>
+        <button onclick="copySubUrl('${esc(u.token)}', 'script')" class="btn-link">脚本</button>
       </td>
       <td class="px-4 py-3">
-        <button onclick="openUserEditModal('${esc(u.token)}')" class="text-blue-500 hover:underline">编辑</button>
+        <button onclick="openUserEditModal('${esc(u.token)}')" class="btn btn-muted">编辑</button>
       </td>
     </tr>
   `).join('');
@@ -665,30 +944,31 @@ async function saveUpstream() {
 async function loadUpstreams() {
   const { data } = await api('/api/upstreams');
   const tbody = document.getElementById('upstreams-table');
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-3 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
-  _upstreamsData = data;
+  _upstreamsData = data || [];
+  updateStats();
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
   tbody.innerHTML = data.map(u => `
-    <tr class="border-t cursor-pointer hover:bg-gray-50" onclick="toggleUpstreamNodes('${esc(u.name)}')">
+    <tr class="cursor-pointer" onclick="toggleUpstreamNodes('${esc(u.name)}')">
       <td class="px-4 py-3 text-gray-400" id="arrow-${esc(u.name)}">&#9654;</td>
       <td class="px-4 py-3 font-semibold">${esc(u.name)}</td>
       <td class="px-4 py-3">${u.nodeCount}</td>
       <td class="px-4 py-3 text-gray-500 text-xs">${u.lastUpdate ? new Date(u.lastUpdate).toLocaleString() : '-'}</td>
       <td class="px-4 py-3">${u.localFetch
-        ? '<span class="text-blue-500">本地拉取</span>'
+        ? '<span class="status-pill status-muted">本地拉取</span>'
         : (u.lastError
-          ? '<span class="text-red-500">' + esc(u.lastError) + '</span>'
-          : (u.lastUpdate ? '<span class="text-green-600">正常</span>' : '<span class="text-gray-400">未同步</span>'))}</td>
+          ? '<span class="status-pill status-error">' + esc(u.lastError) + '</span>'
+          : (u.lastUpdate ? '<span class="status-pill status-ok">正常</span>' : '<span class="status-pill status-warn">未同步</span>'))}</td>
       <td class="px-4 py-3 flex gap-3 whitespace-nowrap" onclick="event.stopPropagation()">
-        <button onclick="refreshOne('${esc(u.name)}')" class="text-green-600 hover:underline whitespace-nowrap">刷新</button>
-        <button onclick="testExisting('${esc(u.name)}')" class="text-yellow-600 hover:underline whitespace-nowrap">测试</button>
-        <button onclick="editUpstream('${esc(u.name)}')" class="text-blue-500 hover:underline whitespace-nowrap">编辑</button>
+        <button onclick="refreshOne('${esc(u.name)}')" class="btn-link green whitespace-nowrap">刷新</button>
+        <button onclick="testExisting('${esc(u.name)}')" class="btn-link amber whitespace-nowrap">测试</button>
+        <button onclick="editUpstream('${esc(u.name)}')" class="btn-link whitespace-nowrap">编辑</button>
       </td>
     </tr>
     <tr id="nodes-row-${esc(u.name)}" class="hidden">
       <td colspan="6" class="px-4 py-2 bg-gray-50">
         <div class="flex items-center gap-2 mb-2">
           <span id="nodes-summary-${esc(u.name)}" class="text-xs text-gray-500">加载中...</span>
-          <button onclick="event.stopPropagation(); testAllUpstreamNodes('${esc(u.name)}')" class="text-xs bg-yellow-500 text-white px-2 py-0.5 rounded hover:bg-yellow-600">全部测速</button>
+          <button onclick="event.stopPropagation(); testAllUpstreamNodes('${esc(u.name)}')" class="btn btn-warning !min-h-0 !py-1 !px-2 text-xs">全部测速</button>
         </div>
         <div id="nodes-list-${esc(u.name)}" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>
       </td>
@@ -722,7 +1002,7 @@ async function toggleUpstreamNodes(name) {
   }
   summary.textContent = `共 ${data.total} 个节点，过滤后 ${data.filtered} 个`;
   el.innerHTML = data.nodes.map(n => `
-    <div class="bg-white border rounded-lg px-3 py-2 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow"
+    <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow"
          onclick="event.stopPropagation(); testOneUpstreamNode('${esc(name)}', '${esc(n.name)}', this)">
       <div class="min-w-0 flex-1 mr-2">
         <div class="text-sm font-medium truncate">${esc(n.name)}</div>
@@ -829,17 +1109,18 @@ async function loadNodes() {
   const { data } = await api('/api/custom-nodes');
   const tbody = document.getElementById('nodes-table');
   _nodesData = data || [];
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-3 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
+  updateStats();
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-gray-400 text-center">暂无自建节点</td></tr>'; return; }
   tbody.innerHTML = data.map(n => `
-    <tr class="border-t">
+    <tr>
       <td class="px-4 py-3 font-semibold">${esc(n.name)}</td>
       <td class="px-4 py-3">${esc(n.type)}</td>
       <td class="px-4 py-3 font-mono text-xs">${esc(n.server)}</td>
       <td class="px-4 py-3">${n.port}</td>
-      <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="text-gray-400">-</span>'}</td>
+      <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="status-pill status-muted">未测试</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="text-yellow-600 hover:underline">测试</button>
-        <button onclick="editNode('${esc(n.name)}')" class="text-blue-500 hover:underline">编辑</button>
+        <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="btn-link amber">测试</button>
+        <button onclick="editNode('${esc(n.name)}')" class="btn-link">编辑</button>
       </td>
     </tr>
   `).join('');
@@ -876,11 +1157,11 @@ async function testAllNodes() {
 
 async function testExistingNodeBtn(name) {
   const el = document.getElementById(`node-status-${name}`);
-  if (el) el.innerHTML = '<span class="text-gray-500">测试中...</span>';
+  if (el) el.innerHTML = '<span class="status-pill status-muted">测试中...</span>';
   const { data } = await api(`/api/custom-nodes/${encodeURIComponent(name)}/test`, { method: 'POST' });
   const html = data?.ok
-    ? `<span class="text-green-600">连通 ${data.latency}ms</span>`
-    : `<span class="text-red-500">${data?.error || '失败'}</span>`;
+    ? `<span class="status-pill status-ok">连通 ${data.latency}ms</span>`
+    : `<span class="status-pill status-error">${data?.error || '失败'}</span>`;
   _nodeStatus[name] = html;
   if (el) el.innerHTML = html;
 }
@@ -1040,7 +1321,7 @@ async function loadScriptUrl() {
 async function saveScriptUrl() {
   const url = document.getElementById('script-url').value.trim();
   await api('/api/script-url', { method: 'POST', body: { url } });
-  toast(url ? '外部链接已保存，Cron 将自动同步基础脚本' : '外部链接已清除');
+  toast(url ? '外部链接已保存，可手动同步基础脚本' : '外部链接已清除');
 }
 
 async function syncScriptFromUrl() {
