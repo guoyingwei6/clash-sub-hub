@@ -1,0 +1,16 @@
+name = "clash-sub-hub-real-staging"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+workers_dev = true
+preview_urls = false
+
+[vars]
+DEPLOYMENT_ENVIRONMENT = "staging"
+
+[observability]
+enabled = false
+
+[[kv_namespaces]]
+binding = "KV"
+id = "a1f767ba17614809872ca3dc2a5dec4d"
