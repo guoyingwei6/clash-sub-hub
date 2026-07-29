@@ -1,5 +1,8 @@
 node_modules/
 dist/
 .wrangler/
+coverage/
+.DS_Store
+.agent-workbench/
 .dev.vars
 src/generated/

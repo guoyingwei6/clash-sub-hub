@@ -1,0 +1,28 @@
+proxy-providers:
+  alpha:
+    type: http
+    url: https://alpha.invalid/subscription
+    interval: 3600
+    override:
+      additional-prefix: "alpha | "
+    header:
+      User-Agent: ["fixture-client"]
+  beta:
+    type: http
+    url: https://beta.invalid/subscription
+    override:
+      additional-prefix: "beta | "
+
+proxies:
+  - name: "fixture-custom"
+    type: vless
+    server: 192.0.2.10
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000001"
+    tls: true
+  - name: "fixture-ISP"
+    type: socks5
+    server: 198.51.100.20
+    port: 1080
+    username: "fixture-user"
+    password: "fixture-password"

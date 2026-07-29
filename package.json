@@ -3,19 +3,39 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "generate": "node scripts/generate-script-content.js",
-    "predev": "node scripts/generate-script-content.js",
-    "predeploy": "node scripts/generate-script-content.js",
+    "generate": "node scripts/generate-script-content.js && node scripts/generate-admin-assets.js",
+    "predev": "npm run generate",
+    "predeploy": "npm run generate",
+    "pretest": "npm run generate",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "typecheck:test": "tsc -p tsconfig.test.json --noEmit",
+    "check:scripts": "node --check scripts/staging-smoke.mjs && node --check scripts/local-equivalence-audit.mjs && node --check scripts/mirror-upload.mjs",
+    "worker:dry-run": "npm run generate && WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "staging:dry-run": "npm run generate && WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --dry-run --config wrangler.staging.toml --outdir .wrangler/staging-dry-run",
+    "staging:deploy": "npm run generate && WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --config wrangler.staging.toml",
+    "staging:provider:dry-run": "WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --dry-run --config wrangler.staging-provider.toml --outdir .wrangler/staging-provider-dry-run",
+    "staging:provider:deploy": "WRANGLER_LOG_PATH=.wrangler/logs wrangler deploy --config wrangler.staging-provider.toml",
+    "staging:smoke": "node scripts/staging-smoke.mjs",
+    "audit:local-equivalence": "node scripts/local-equivalence-audit.mjs",
+    "check": "npm run generate && npm run typecheck && npm run typecheck:test && npm run check:scripts && npm run test:coverage && npm run worker:dry-run",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "js-yaml": "^4.1.0"
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240512.0",
-    "@types/js-yaml": "^4.0.9",
+    "@cloudflare/workers-types": "^5.20260729.1",
+    "@types/node": "^26.1.2",
+    "@vitest/coverage-v8": "^4.1.10",
+    "codemirror": "^5.65.21",
+    "postcss": "^8.5.24",
+    "tailwindcss": "^3.4.19",
     "typescript": "^5.4.0",
-    "wrangler": "^4.94.0"
+    "vitest": "^4.1.10",
+    "wrangler": "^4.115.0"
   }
 }

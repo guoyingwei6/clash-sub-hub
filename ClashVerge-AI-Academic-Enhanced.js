@@ -2,7 +2,7 @@
 /*
  * Clash Verge (Mihomo/Meta) 高级分流脚本 - 学术与 AI 增强版
  * 👨‍💻 作者：Yingwei Guo (@guoyingwei6)
- * 📅 更新日期：2026.05.20
+ * 📅 更新日期：2026.07.29
  *
  * ✨ 核心特性：
  * 1. 🧹 节点管理无忧：automatic additional-prefix 前缀隔离，多机场订阅节点永不冲突，订阅导入即用。
@@ -10,7 +10,7 @@
  * 3. 🎯 多维精准分流：深度集成 Loyalsoldier 与 Blackmatrix7 规则，涵盖广告拦截、社交媒体与谷歌服务，内置 24h 自动同步，分流逻辑与全球 IP 段始终最新。
  * 4. 🌐 AI极净安全链路：强制美国家宽链式中转 + 自建 Reality 故障切换，搭配自部署 DoH 服务器，双层隔离防封号、防 DNS 污染/劫持。
  * 5. 🔬 学术专属直连：深度整合主流期刊域名 + Zotero/EndNote 进程识别，确保机构 IP 导出，实现论文全文自动下载。
- * 6. 🔒 安全解耦·动态适配：订阅链接与节点凭据通过 Merge 注入，脚本不含敏感信息可安全开源；同时自动检测自建/家宽节点是否存在，按需生成分组，零手动干预。
+ * 6. 🔒 安全解耦·动态适配：订阅链接与节点凭据通过 Merge 注入，脚本不含敏感信息可安全开源；自动识别机场订阅、家宽节点与名称以「🛠」开头的本地自建节点。
  *
  * 使用方法：
  *   - 将本脚本设置为 Clash Verge 的「全局扩展脚本」(Script)
@@ -18,6 +18,8 @@
  *   - Merge 模板参见 README
  *
  * 更新日志：
+ * 2026-07-29：同步当前本地分流逻辑；自建节点按名称自动归类，补齐 Codex/LAN 规则与 Tailscale 路由绕过；敏感 DNS 和额外路由仅允许通过受校验的远端参数注入
+ * 2026-07-10：优化自建节点自动归类逻辑；名称以「🛠」开头的 Merge 节点自动加入「优先自建」
  * 2026-05-20：TUN 新增 exclude-route 排除 10.0.0.0/8，修复内网 SSH 等流量被 TUN 劫持问题
  * 2026-05-19：新增「家宽中转」分组，排除 CF 系机场节点，修复家宽链式中转随机 timeout 问题；新增自建 TUIC 节点支持，「优先自建」fallback 顺序改为 Reality → TUIC → 自动选择
  * 2026-04-21：proxy-server-nameserver 改用国内 DNS 防止节点解析死循环；新增 direct-nameserver-follow-policy: true
@@ -55,9 +57,15 @@ function main(config) {
     stack: "system",        // system 模式兼容性最佳，避免 gvisor/mixed 对部分网站的兼容问题
     "auto-route": true,
     "auto-detect-interface": true,
-    "strict-route": true,   // ← 加这个，放宽路由限制
+    "strict-route": false,
     "dns-hijack": ["any:53", "tcp://any:53"], //强制劫持所有UDP/TCP53查询
-    "exclude-route": ["10.0.0.0/8"],   //绕过本地内网
+    "route-exclude-address": [
+      "127.0.0.0/8",
+      "10.0.0.0/8",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "100.64.0.0/10"
+    ],
     mtu: 1400               // 降低 MTU 防止大包丢失（默认 1500 会导致微信图片等大文件发送失败）
   };
 
@@ -78,13 +86,15 @@ function main(config) {
   const providerNames = Object.keys(config["proxy-providers"] || {});
 
   // 动态检测自建节点和家宽节点是否存在（由 Merge 注入）
-  const hasSelfBuilt = config.proxies.some(p => p.name === "🛠 自建-Reality");
+  const selfBuiltNodes = config.proxies
+    .map(p => p.name)
+    .filter(name => name && name.startsWith("🛠 "));
+  const hasSelfBuilt = selfBuiltNodes.length > 0;
   const hasISP = config.proxies.some(p => p.name === "🏠 家宽-ISP");
-  const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 
   // DNS
   const domesticNameservers = ["https://223.5.5.5/dns-query", "https://doh.pub/dns-query", "https://dns.alidns.com/dns-query"];
-  const foreignNameservers  = ["https://doh.guoyingwei.top/dns-query", "https://dns.guoyingwei.top/1:-P8_P5Gwnk1_pv__tt__X__72N3-8zEA6_sAyA==", "https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query", "https://dns.quad9.net/dns-query", "https://8.8.8.8/dns-query", "https://208.67.222.222/dns-query", "https://77.88.8.8/dns-query", "https://8.8.4.4/dns-query"];
+  const foreignNameservers  = ["https://doh.guoyingwei.top/dns-query", "https://1.1.1.1/dns-query", "https://1.0.0.1/dns-query", "https://dns.quad9.net/dns-query", "https://8.8.8.8/dns-query", "https://208.67.222.222/dns-query", "https://77.88.8.8/dns-query", "https://8.8.4.4/dns-query"];
 
   // 自定义域名后缀
   const customDomainSuffix = {
@@ -117,10 +127,12 @@ function main(config) {
     "微软服务": [],
     "苹果服务": [],
     "节点选择": [
-      "cloudflare.com"
+      "cloudflare.com",
+      "islide.cc",
+      "xiaoyuzhoufm.com"
     ],
     "全局直连": [
-      "naixi.net",
+      "deepseek.com",
       "ncbi.nlm.nih.gov",
       "pubmed.ncbi.nlm.nih.gov",
       "arxiv.org",
@@ -128,7 +140,6 @@ function main(config) {
       "elsevier.com",
       "oup.com",
       "academic.oup.com",
-      "nature.com",
       "science.org",
       "sciencemag.org",
       "springer.com",
@@ -216,7 +227,7 @@ function main(config) {
     //"direct-nameserver-follow-policy": true,
     "nameserver-policy": {
       "geosite:private,cn": domesticNameservers,
-      "geosite:google,youtube,openai,netflix,claude,tiktok,gemini,anthropic,perplexity": foreignNameservers,
+      "geosite:google,youtube,openai,netflix,tiktok": foreignNameservers,
       "+.claude.ai,+.x.ai,+.gemini.googleapis.com,+.generativelanguage.googleapis.com,+.perplexity.ai": foreignNameservers,
       "+.nature.com,+.sciencedirect.com,+.springer.com,+.ieee.org,+.wiley.com,+.arxiv.org": domesticNameservers
     }
@@ -262,7 +273,7 @@ function main(config) {
   const groupBase = {
     interval: 300,
     timeout: 3000,
-    url: "https://connectivitycheck.gstatic.com/generate_204",
+    url: "https://www.gstatic.com/generate_204",
     lazy: true,
     "max-failed-times": 3,
     hidden: false
@@ -270,16 +281,16 @@ function main(config) {
   const commonProxies = ["优先自建", "⚡️ 自动选择", "节点选择", ...(hasISP ? ["🏠 家宽"] : []), "全局直连"];
   const iconBase = "https://fastly.jsdelivr.net/gh/";
 
-  // 优先自建 fallback 组：没有自建节点就只剩自动选择
+  // 优先自建 fallback 组：所有本地自建节点优先，家宽中转兜底
   const prioritySelfBuiltGroup = {
     name: "优先自建",
     type: "fallback",
     proxies: [
-      ...(hasSelfBuilt ? ["🛠 自建-Reality"] : []),
-      ...(hasTUIC ? ["🛠 自建-TUIC"] : []),
-      "⚡️ 自动选择"
+      ...selfBuiltNodes,
+      ...(hasISP ? ["🚇 家宽中转"] : []),
+      ...(!hasSelfBuilt && !hasISP ? ["⚡️ 自动选择"] : [])
     ],
-    url: "https://connectivitycheck.gstatic.com/generate_204",
+    url: "https://www.gstatic.com/generate_204",
     interval: 300,
     lazy: true,
     icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/guard.svg"
@@ -299,7 +310,7 @@ function main(config) {
     {
       name: "节点选择",
       type: "select",
-      proxies: [...(hasISP ? ["🏠 家宽"] : []), "优先自建", "⚡️ 自动选择", "全局直连"],
+      proxies: [...(hasISP ? ["🏠 家宽"] : []), "优先自建", ...(hasISP ? ["🚇 家宽中转"] : []), "全局直连"],
       icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/adjust.svg"
     },
     prioritySelfBuiltGroup,
@@ -316,7 +327,7 @@ function main(config) {
       type: "url-test",
       tolerance: 100,
       use: providerNames,
-      filter: "^(?!.*(BPB|cfnew|Edge|自建|官网|套餐|流量|异常|剩余|ISP|all|免费|低倍率|0\\.[0-9]x|测试|到期)).*(日本|香港|韩国|台湾|美国|JP|HK|KR|TW|US).*$",
+      filter: "^(?!.*(BPB|cfnew|Edge|官网|套餐|流量|异常|剩余|ISP|all|免费|低倍率|0\\.[0-9]x|测试|到期)).*$",
       icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/ambulance.svg"
     }] : []),
     { name: "谷歌服务", proxies: commonProxies, icon: "clash-verge-rev/clash-verge-rev.github.io@main/docs/assets/icons/google.svg" },
@@ -343,7 +354,13 @@ function main(config) {
     config["proxy-groups"].push({ ...groupBase, ...g, icon, type: g.type || "select" });
   });
 
-  // 规则：先加自定义域名（优先级最高），再加基础规则
+  // 规则：本地网段最高优先直连，再加自定义域名和基础规则
+  config.rules.push(
+    "IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
+    "IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
+    "IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+    "IP-CIDR,100.64.0.0/10,DIRECT,no-resolve"
+  );
   Object.entries(customDomainSuffix).forEach(([group, domains]) => {
     domains.forEach(d => {
       if (d.trim()) config.rules.push(`DOMAIN-SUFFIX,${d},${group}`);
@@ -351,6 +368,7 @@ function main(config) {
   });
 
   config.rules.push(
+    // AI
     "RULE-SET,AI,AI",
     "PROCESS-NAME,Claude.exe,AI",
     "PROCESS-NAME,Cursor.exe,AI",
@@ -360,6 +378,10 @@ function main(config) {
     "PROCESS-NAME,claude,AI",
     "PROCESS-NAME,cursor,AI",
     "PROCESS-NAME,Claude Helper,AI",
+    "PROCESS-NAME,Codex,AI",
+    "PROCESS-NAME,codex,AI",
+    "PROCESS-NAME,Codex (Service),AI",
+    "PROCESS-NAME,Codex (Renderer),AI",
     //微信直连
     "PROCESS-NAME,WeChat,全局直连",
     "PROCESS-NAME,wechat,全局直连",
@@ -372,8 +394,8 @@ function main(config) {
     "PROCESS-NAME,EndNote,全局直连",
     "PROCESS-NAME,wpsoffice,优先自建",
     "PROCESS-NAME,wpscloudsvr,优先自建",
-    "RULE-SET,applications,全局直连",
-    "RULE-SET,private,全局直连",
+    "RULE-SET,applications,DIRECT",
+    "RULE-SET,private,DIRECT",
     "DOMAIN-SUFFIX,googleapis.cn,节点选择",
     "DOMAIN-SUFFIX,gstatic.com,节点选择",
     "DOMAIN-SUFFIX,xn--ngstr-lra8j.com,节点选择",
@@ -392,12 +414,12 @@ function main(config) {
     "RULE-SET,gfw,优先自建",
     "RULE-SET,tld-not-cn,优先自建",
     "RULE-SET,direct,全局直连",
-    "RULE-SET,lancidr,全局直连,no-resolve",
+    "RULE-SET,lancidr,DIRECT,no-resolve",
     "RULE-SET,cncidr,全局直连,no-resolve",
     "AND,((NETWORK,UDP),(DST-PORT,443)),REJECT",
     "RULE-SET,telegramcidr,电报消息,no-resolve",
     "GEOSITE,CN,全局直连",
-    "GEOIP,LAN,全局直连,no-resolve",
+    "GEOIP,LAN,DIRECT,no-resolve",
     "GEOIP,CN,全局直连,no-resolve",
     "MATCH,漏网之鱼"
   );

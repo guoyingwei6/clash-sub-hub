@@ -1,0 +1,43 @@
+proxy-providers:
+  alpha:
+    type: http
+    url: https://alpha.invalid/v2/subscription
+    interval: 7200
+    exclude-filter: "fixture-info"
+    override:
+      additional-prefix: "A | "
+    header:
+      User-Agent: ["fixture-client-v2"]
+  gamma:
+    type: http
+    url: https://gamma.invalid/subscription
+    x-clash-sub-hub-required: false
+    override:
+      additional-prefix: "gamma | "
+
+proxies:
+  - name: "fixture-custom"
+    type: vless
+    server: 192.0.2.10
+    port: 8443
+    uuid: "00000000-0000-4000-8000-000000000001"
+    tls: true
+  - name: "fixture-ISP"
+    type: socks5
+    server: 198.51.100.20
+    port: 1080
+    username: "fixture-user"
+    password: "fixture-password"
+  - name: "fixture-new"
+    type: tuic
+    server: 203.0.113.30
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000002"
+    password: "fixture-password-2"
+
+x-clash-sub-hub:
+  schema-version: 2
+  policy:
+    filter-upstream-info-nodes: true
+    missing-cache: serve-stale
+    max-cache-age-seconds: 7200

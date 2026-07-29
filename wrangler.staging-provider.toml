@@ -1,0 +1,8 @@
+name = "clash-sub-hub-staging-provider"
+main = "src/staging-provider-worker.ts"
+compatibility_date = "2024-09-23"
+workers_dev = true
+preview_urls = false
+
+[vars]
+DEPLOYMENT_ENVIRONMENT = "staging-provider"

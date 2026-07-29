@@ -1,10 +1,24 @@
 import { Env } from './types';
-import { checkAdmin, unauthorized } from './auth';
+import {
+  adminSessionStatus,
+  checkAdmin,
+  clearAdminSession,
+  createAdminSession,
+  unauthorized,
+} from './auth';
 import { handleMerge, handleSubscription } from './subscription';
 import { handleScheduled } from './cron';
 import { builtinScriptContent } from './generated/script-content';
+import { adminCss, codeMirrorJs } from './generated/admin-assets';
+import { handleMirrorStageUpload, handleMirrorUpload } from './mirror';
 import {
-  listUsers, createUser, updateUser, deleteUser,
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  rotateUserToken,
+} from './users';
+import {
   listUpstreams, createUpstream, updateUpstream, deleteUpstream,
   testUpstream, testExistingUpstream, listUpstreamNodes, testUpstreamNode, refreshOne, refreshAll,
   listCustomNodes, createCustomNode, updateCustomNode, deleteCustomNode, testNewNode, testExistingNode,
@@ -13,6 +27,7 @@ import {
   importMerge, exportMerge,
   getSettings, updateSettings,
 } from './admin';
+import { handleStagingProvider } from './staging-fixture';
 import UI_HTML from './ui.html';
 
 export default {
@@ -23,8 +38,14 @@ export default {
 
     // CORS
     if (method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders() });
+      return new Response(null, { headers: corsHeaders(request) });
     }
+
+    // This endpoint is compiled into both builds so that the staging smoke test
+    // can exercise a real Worker-side fetch. The runtime binding is the hard
+    // boundary: production and unknown environments always return 404.
+    const stagingProvider = handleStagingProvider(path, method, env);
+    if (stagingProvider) return stagingProvider;
 
     // 公开接口：订阅
     const subMatch = path.match(/^\/sub\/([^/]+)$/);
@@ -40,26 +61,77 @@ export default {
       return handleMerge(mergeMatch[1], env);
     }
 
-    // 公开接口：全局扩展脚本（KV override 优先，否则返回内置版本）
+    // 公开接口：只返回随 Worker 构建的已审计脚本。生产 KV 中可能残留
+    // 旧 script-base；它不得再次进入公开响应。
     if (path === '/script.js') {
-      const script = await env.KV.get('script-base') || await env.KV.get('script') || builtinScriptContent;
-      return new Response(script, {
-        headers: { 'Content-Type': 'application/javascript; charset=utf-8' },
+      return new Response(builtinScriptContent, {
+        headers: {
+          'Content-Type': 'application/javascript; charset=utf-8',
+          'Cache-Control': 'public, max-age=300',
+          'X-Content-Type-Options': 'nosniff',
+        },
       });
+    }
+
+    if (path === '/assets/admin.css') {
+      return staticAsset(adminCss, 'text/css; charset=utf-8');
+    }
+    if (path === '/assets/codemirror.js') {
+      return staticAsset(codeMirrorJs, 'application/javascript; charset=utf-8');
     }
 
     // 管理页面
     if (path === '/admin' || path === '/admin/') {
       return new Response(UI_HTML, {
-        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+        headers: {
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'Referrer-Policy': 'no-referrer',
+          'X-Content-Type-Options': 'nosniff',
+          'X-Frame-Options': 'DENY',
+          'Content-Security-Policy': [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline'",
+            "style-src 'self' 'unsafe-inline'",
+            "connect-src 'self'",
+            "img-src 'self' data:",
+            "base-uri 'none'",
+            "form-action 'self'",
+            "frame-ancestors 'none'",
+          ].join('; '),
+        },
       });
+    }
+
+    const mirrorMatch = path.match(/^\/mirror\/([^/]+)$/);
+    if (mirrorMatch && method === 'POST') {
+      return handleMirrorUpload(decodeURIComponent(mirrorMatch[1]), request, env);
+    }
+
+    const mirrorStageMatch = path.match(/^\/mirror-stage\/([^/]+)$/);
+    if (mirrorStageMatch && method === 'POST') {
+      return handleMirrorStageUpload(decodeURIComponent(mirrorStageMatch[1]), request, env);
     }
 
     // 以下均为管理 API，需要鉴权
     if (path.startsWith('/api/')) {
-      if (!checkAdmin(request, env)) return unauthorized();
+      if (path === '/api/admin/session') {
+        if (method === 'POST') {
+          return addCors(await createAdminSession(request, env), request);
+        }
+        if (method === 'DELETE') {
+          return addCors(clearAdminSession(), request);
+        }
+        if (method === 'GET') {
+          const response = await checkAdmin(request, env)
+            ? adminSessionStatus(env)
+            : unauthorized();
+          return addCors(response, request);
+        }
+      }
+      if (!await checkAdmin(request, env)) return unauthorized();
       const resp = await routeApi(path, method, request, env);
-      return addCors(resp);
+      return addCors(resp, request);
     }
 
     return new Response('Not Found', { status: 404 });
@@ -70,6 +142,16 @@ export default {
   },
 };
 
+function staticAsset(content: string, contentType: string): Response {
+  return new Response(content, {
+    headers: {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
 async function routeApi(
   path: string,
   method: string,
@@ -79,6 +161,11 @@ async function routeApi(
   // 用户
   if (path === '/api/users' && method === 'GET') return listUsers(env);
   if (path === '/api/users' && method === 'POST') return createUser(request, env);
+
+  const userRotateMatch = path.match(/^\/api\/users\/([^/]+)\/rotate$/);
+  if (userRotateMatch && method === 'POST') {
+    return rotateUserToken(decodeURIComponent(userRotateMatch[1]), env);
+  }
 
   const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
   if (userMatch) {
@@ -160,16 +247,26 @@ async function routeApi(
   return Response.json({ error: 'Not Found' }, { status: 404 });
 }
 
-function corsHeaders(): Record<string, string> {
-  return {
-    'Access-Control-Allow-Origin': '*',
+function corsHeaders(request: Request): Record<string, string> {
+  const requestOrigin = request.headers.get('Origin');
+  const ownOrigin = new URL(request.url).origin;
+  const headers: Record<string, string> = {
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    Vary: 'Origin',
   };
+  if (requestOrigin === ownOrigin) headers['Access-Control-Allow-Origin'] = ownOrigin;
+  return headers;
 }
 
-function addCors(resp: Response): Response {
+function addCors(resp: Response, request: Request): Response {
   const headers = new Headers(resp.headers);
-  headers.set('Access-Control-Allow-Origin', '*');
+  const requestOrigin = request.headers.get('Origin');
+  const ownOrigin = new URL(request.url).origin;
+  if (requestOrigin === ownOrigin) headers.set('Access-Control-Allow-Origin', ownOrigin);
+  headers.set('Vary', 'Origin');
+  headers.set('Cache-Control', 'no-store');
+  headers.set('Referrer-Policy', 'no-referrer');
+  headers.set('X-Content-Type-Options', 'nosniff');
   return new Response(resp.body, { status: resp.status, headers });
 }

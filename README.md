@@ -11,15 +11,31 @@
 | **Clash Sub Hub** | Cloudflare Workers 订阅聚合服务，支持多用户 token、上游缓存、管理后台 |
 | **ClashVerge-AI-Academic-Enhanced.js** | Clash Verge / Mihomo 全局扩展脚本，专为学术科研 + AI 场景深度优化 |
 
+推荐使用方式：在 Clash Verge 中只导入 `/sub/:token`。Worker 直接返回包含节点、分组、规则、DNS 和 TUN 的完整 Mihomo YAML；机场和自建节点都在远端维护。
+
 ---
 
 ## 更新记录
+
+### 2026-07-29
+
+- `/sub/:token` 改为默认 Materialized 单链接；Provider/Merge 只有被管理员显式授权的用户才能使用。
+- Merge 导入改为“预览差异 → 二次确认 → 全量替换”，支持新增、更新和删除，并保留 30 天 revision 审计快照；小时级 artifact 刷新不重复保存完整敏感快照。
+- 活动配置内嵌完整 Materialized artifact，订阅请求不再逐个解析所有机场缓存，也不会读取跨 KV 键传播中的半成品。
+- 恢复每小时 Cron，增加最后成功缓存、指数退避、下一次重试时间和陈旧状态；普通机场默认 optional + serve-stale。
+- 增加受信任 Mirror 预载/上传协议：HMAC-SHA256、5 分钟时间窗、随机 nonce、防重放、严格节点解析和大小限制。
+- 用户 token 改为 256-bit 随机值并只保存 SHA-256；支持权限、禁用、轮换和 Provider/Merge 高风险开关。
+- 停止动态执行或公开 KV 脚本；`/script.js` 只返回构建时审计版本。
+- 管理后台依赖改为同源构建资源，增加 CSP、输入/XSS 防护，并把登录密码换成 15 分钟 HttpOnly 签名会话；Bearer 仅保留给自动化客户端。
+- 增加 TypeScript、Vitest、覆盖率、安全 fixture 和 Worker dry-run release gate。
+- 增加隔离 Staging Worker/KV、脱敏 Provider Worker、精确主机白名单、强制 Mihomo smoke 和本地只读等效性审计；真实客户端导入仍需用户单独确认。
+- `main` 推送只执行 release gate；生产部署必须手动触发、选择 `DEPLOY_PRODUCTION`，并经过 GitHub `production` environment 门禁。
 
 ### 2026-06-29
 
 - 新增 `/sub/:token?mode=materialized`，由 Worker 直接输出已物化完整 Mihomo YAML，Clash Verge 可只导入一个订阅链接，不再依赖本地 Merge 覆写。
 - 新增 `/merge/:token`，继续支持空 Profile Template + 全局扩展脚本 + Merge 覆写的高级用法。
-- 恢复 Cloudflare Workers 线上部署，改为 GitHub Actions 连接 GitHub 自动构建和部署；推送到 `main` 后会自动触发部署。
+- 当时恢复 Cloudflare Workers 线上部署并接入 GitHub Actions；自 2026-07-29 起，`main` 推送只做验证，生产部署改为人工门禁。
 - 去掉 Cloudflare Cron Triggers，避免占用账号 Cron 配额；上游订阅和基础脚本改为管理后台手动刷新/同步。
 - 重做 `/admin` 管理后台 UI：新增侧边导航、顶部操作栏、统计摘要、统一按钮/状态标签/表格/弹窗样式，并适配移动端。
 
@@ -308,14 +324,14 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 
 ### 功能特性
 
-- **多用户管理**：自定义 token 创建用户，每人独立订阅链接，随时启用/禁用
-- **上游订阅聚合**：支持添加多个机场订阅，Worker 缓存节点，管理后台可手动刷新
+- **多用户管理**：服务端生成高熵 token；每个分享对象可独立授权、禁用和轮换
+- **上游订阅聚合**：支持 `server`、`mirror`、`disabled` 三种抓取模式和最后成功缓存
 - **自建节点管理**：YAML 格式添加/编辑自建节点，支持 TCP 连通性测试
-- **完整配置输出**：服务端执行扩展脚本，输出带完整分流规则的 Clash 配置
+- **完整配置输出**：活动配置内嵌确定性 artifact，输出节点、分组、规则、DNS 和 TUN
 - **Base64 格式**：`?format=base64` 输出 URI 列表，兼容 Shadowrocket 等客户端
-- **脚本分层管理**：基础脚本（外部链接手动同步）+ 自定义追加脚本（不被覆盖）
-- **导入导出**：支持 Merge YAML 导入导出，一键迁移机场订阅和自建节点
-- **管理后台**：Web UI 管理界面，CodeMirror 代码编辑器
+- **全量同步**：Merge YAML 先预览差异，再显式 replace；失败不切换活动配置
+- **安全构建**：Materialized 只执行编译进 Worker 的生成器，不执行 KV 中的任意 JavaScript
+- **管理后台**：同源 Tailwind/CodeMirror 资源、CSP、15 分钟 HttpOnly/SameSite 签名会话；长期管理员密码不进入浏览器存储
 
 ### 技术栈
 
@@ -328,26 +344,31 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/sub/:token` | GET | 获取 Provider 模式完整配置，保留 Clash Verge 高级玩法 |
-| `/sub/:token?mode=materialized` | GET | 获取已物化完整 Mihomo YAML，不需要 Clash Verge Merge 覆写 |
+| `/sub/:token` | GET | 默认获取已物化完整 Mihomo YAML；推荐分享链接 |
+| `/sub/:token?mode=provider` | GET | 高风险降级模式；仅显式授权用户可用，会暴露原始上游 URL |
 | `/sub/:token?mode=nodes` | GET | 获取已物化纯节点 YAML |
 | `/sub/:token?format=base64` | GET | 获取已物化 URI Base64 订阅 |
-| `/merge/:token` | GET | 获取 Clash Verge 全局 Merge 覆写配置 |
-| `/script.js` | GET | 获取基础扩展脚本 |
+| `/merge/:token` | GET | 高风险 Legacy Merge；仅显式授权用户可用 |
+| `/script.js` | GET | 获取构建时审计的 Legacy 扩展脚本 |
+| `/mirror/:upstreamId` | POST | HMAC 鉴权的活动 Mirror 缓存上传 |
+| `/mirror-stage/:upstreamId` | POST | 配置激活前的 HMAC Mirror 预载 |
 | `/admin` | GET | 管理后台 |
+| `/api/admin/session` | GET/POST/DELETE | 检查、创建或清除短期管理会话 |
 | `/api/users` | GET/POST | 用户管理 |
 | `/api/upstreams` | GET/POST | 上游订阅管理 |
 | `/api/custom-nodes` | GET/POST | 自建节点管理 |
-| `/api/script` | GET/POST | 脚本管理 (base + override) |
+| `/api/script` | GET | 查看构建时脚本状态；运行时写入返回 410 |
 | `/api/refresh` | POST | 手动刷新所有上游 |
-| `/api/import/merge` | POST | 导入 Merge YAML |
+| `/api/import/merge` | POST | 预览或 replace 应用 Merge YAML |
 | `/api/export/merge` | GET | 导出 Merge YAML |
 
 ### 输出模式
 
-- **Provider 配置**：`/sub/:token` 输出 `proxy-providers` + 自建节点 + 脚本生成的规则和分组，适合继续使用 Clash Verge 高级模式。
-- **直连 YAML**：`/sub/:token?mode=materialized` 使用 Worker 已缓存的上游节点和自建节点生成完整 Mihomo YAML，Clash Verge 只需导入一个订阅链接，不需要 Merge 覆写。
-- **Merge 覆写**：`/merge/:token` 只输出 `proxy-providers` 和 `proxies`，适合配合空 Profile Template 与全局扩展脚本使用。
+- **Materialized（默认）**：`/sub/:token` 返回完整 YAML，不包含原始机场订阅 URL，Clash Verge 不再需要本地 Merge/Script。
+- **纯节点**：`?mode=nodes` 或 `?format=base64`，用于只需要节点的客户端。
+- **Provider/Merge（显式降级）**：会把机场订阅 URL 交给接收者，因此新用户默认禁止；只可对完全受信任对象开启。
+
+分享边界：Materialized 会隐藏原始机场订阅 URL，但接收者必然可以读取最终节点连接参数。每个分享对象应使用独立 token，便于单独吊销和轮换。
 
 ### 部署步骤
 
@@ -363,19 +384,79 @@ npm install
 npx wrangler kv namespace create KV
 # 将输出的 id 填入 wrangler.toml
 
-# 4. 设置管理密码
+# 4. 设置 Worker secrets
 npx wrangler secret put ADMIN_PASSWORD
+npx wrangler secret put MIRROR_UPLOAD_SECRET
 
-# 5. 部署
+# 5. 运行完整 release gate
+npm run check
+
+# 6. 部署
 npx wrangler deploy
 
-# 6. GitHub Actions 自动部署
-# 设置 GitHub Secrets: CLOUDFLARE_ACCOUNT_ID、CLOUDFLARE_API_TOKEN、ADMIN_PASSWORD
-# 推送到 main 后自动构建并部署 Worker
+# 7. GitHub Actions 验证与人工生产部署
+# 设置 GitHub Secrets:
+# CLOUDFLARE_ACCOUNT_ID、CLOUDFLARE_API_TOKEN、
+# ADMIN_PASSWORD、MIRROR_UPLOAD_SECRET
+# 推送到 main 后只运行 release gate。
+# 生产部署需在 Actions 手动运行 Deploy Worker，
+# 并选择 DEPLOY_PRODUCTION；建议为 production environment 配置审批人。
 
-# 7. (可选) 绑定自定义域名
+# 8. (可选) 绑定自定义域名
 # 在 Cloudflare Dashboard → Workers → 自定义域名
 ```
+
+### 隔离 Staging 验证
+
+Staging 使用独立 Worker、独立 KV 和纯 TEST-NET fixture，不应指向生产 KV。完整 smoke 会先验证服务端返回 `deploymentEnvironment=staging`，然后才允许写入测试 KV。
+
+```bash
+npm run staging:dry-run
+npm run staging:provider:dry-run
+
+# 部署仅限隔离 Staging
+npm run staging:provider:deploy
+npm run staging:deploy
+
+# ADMIN_PASSWORD 与 MIRROR_UPLOAD_SECRET 应由当前受保护 shell/secret store 注入
+CLASH_SUB_HUB_URL="https://clash-sub-hub-staging.guoyingwei6.workers.dev" \
+STAGING_PROVIDER_URL="https://clash-sub-hub-staging-provider.guoyingwei6.workers.dev/provider.yaml" \
+MIHOMO_BIN="/absolute/path/to/mihomo" \
+npm run staging:smoke
+```
+
+Smoke 固定只接受仓库中登记的这两个精确主机；fork 或重建 Staging 时，应先在代码评审中更新白名单，不能用命令行临时绕过。
+
+对本机真实 Clash Verge 状态只做内存比较：
+
+```bash
+npm run audit:local-equivalence
+```
+
+该审计只输出计数和布尔结果，不打印订阅源、token、节点名称或凭据，也不会写 Clash Verge 配置。导入/切换订阅、修改客户端、重启 Clash、切换系统代理或 TUN 都不属于上述命令；这些动作必须另行得到用户明确授权。
+
+详细验证结果见 `docs/reports/2026-07-29-staging-validation.md`。
+
+### 受信任 Mirror 生产者
+
+当 Cloudflare 无法直接抓取某个机场时，在导出的 Merge 中将该 Provider 标为：
+
+```yaml
+x-clash-sub-hub-fetch-mode: mirror
+```
+
+把该上游的 `UpstreamDefinition` JSON 保存在受信任 VPS 的仓库外路径，然后定时运行：
+
+由 systemd/cron 的受限环境文件或 secret manager 注入
+`CLASH_SUB_HUB_URL` 和 `MIRROR_UPLOAD_SECRET`，不要把 secret 写进命令历史；任务本身只运行：
+
+```bash
+node scripts/mirror-upload.mjs --definition /安全路径/upstream.json
+```
+
+首次导入或 URL/UA 变更前，先加 `--stage` 预载，再执行 Merge replace。脚本不会输出订阅 URL、secret 或节点内容。建议由 VPS 的 systemd timer/cron 每小时执行；正式切换前必须确认后台显示该 Mirror 有新鲜缓存。
+
+导出的 Merge 会携带稳定的 `x-clash-sub-hub-id`；新 Mirror 即使尚未激活，预览、`--stage` 和最终 apply 也会使用同一身份。活动上传只有在缓存写入且默认 Materialized artifact 重建成功后才返回成功。
 
 ---
 

@@ -1,0 +1,88 @@
+proxy-providers:
+  fixture-mirror:
+    type: http
+    url: https://fixture-source.invalid/subscription
+    interval: 3600
+    override:
+      additional-prefix: "fixture-mirror | "
+    header:
+      User-Agent: ["fixture-client"]
+    x-clash-sub-hub-id: up_ed835a7252ca8fb8d3844f88e416c4f8
+    x-clash-sub-hub-fetch-mode: mirror
+    x-clash-sub-hub-required: true
+
+  fixture-server:
+    type: http
+    url: https://staging-fixture.invalid/__staging/provider.yaml
+    interval: 3600
+    override:
+      additional-prefix: "fixture-server | "
+    header:
+      User-Agent: ["fixture-client"]
+    x-clash-sub-hub-id: up_983b638602a880f0f0fdeb48575e8e07
+    x-clash-sub-hub-fetch-mode: server
+    x-clash-sub-hub-required: true
+
+proxies:
+  - name: "🛠 自建-Reality"
+    type: vless
+    server: 192.0.2.10
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000001"
+    network: tcp
+    tls: true
+    flow: xtls-rprx-vision
+    servername: fixture-sni.invalid
+    reality-opts:
+      public-key: "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+      short-id: "0011223344556677"
+
+  - name: "🏠 家宽-ISP"
+    type: socks5
+    server: 198.51.100.20
+    port: 1080
+    username: "fixture-user"
+    password: "fixture-password"
+    udp: true
+    dialer-proxy: "🚇 家宽中转"
+
+  - name: "🛠 自建-TUIC"
+    type: tuic
+    server: 192.0.2.11
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000002"
+    password: "fixture-tuic-password"
+    version: 5
+    congestion-controller: bbr
+    udp-relay-mode: native
+    tls: true
+    skip-cert-verify: true
+    sni: fixture-tuic.invalid
+    alpn: [h3, h2, http/1.1]
+
+  - name: "🛠 Rabisu-Reality"
+    type: vless
+    server: 192.0.2.12
+    port: 443
+    uuid: "00000000-0000-4000-8000-000000000003"
+    network: tcp
+    tls: true
+    udp: true
+    flow: xtls-rprx-vision
+    client-fingerprint: chrome
+    servername: fixture-rabisu.invalid
+    packet-encoding: xudp
+    reality-opts:
+      public-key: "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+      short-id: "8899aabbccddeeff"
+
+x-clash-sub-hub:
+  schema-version: 2
+  policy:
+    filter-upstream-info-nodes: true
+    missing-cache: fail
+    max-cache-age-seconds: 7200
+    domestic-nameservers: [https://dns-fixture.invalid/domestic]
+    foreign-nameservers: [https://dns-fixture.invalid/foreign]
+    tun-route-exclude-addresses: [203.0.113.0/24]
+    dns-fake-ip-filter-append: ["+.fixture.invalid"]

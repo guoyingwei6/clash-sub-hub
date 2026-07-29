@@ -3,14 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="icon" type="image/png" href="https://raw.githubusercontent.com/clash-verge-rev/icon-hub/main/official-cat/common.png">
 <title>Clash Sub Hub</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.css">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/theme/dracula.min.css">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/codemirror.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.18/mode/javascript/javascript.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<link rel="stylesheet" href="/assets/admin.css">
+<script src="/assets/codemirror.js"></script>
 <style>
   :root {
     --bg: #f6f8fb;
@@ -223,11 +218,8 @@
     <!-- 订阅链接 -->
     <div class="mb-4">
       <label class="block text-sm font-medium text-gray-700 mb-2">订阅链接</label>
-      <div class="flex gap-2">
-        <button onclick="copySubUrl(_ueToken, 'full')" class="btn btn-muted flex-1">Provider</button>
-        <button onclick="copySubUrl(_ueToken, 'materialized')" class="btn btn-primary flex-1">直连 YAML</button>
-        <button onclick="copySubUrl(_ueToken, 'merge')" class="btn btn-muted flex-1">Merge</button>
-      </div>
+      <p class="text-xs text-gray-500 mb-2">完整 token 不保存在后台。新链接只显示一次；轮换后旧链接会失效，但 Cloudflare KV 跨地域传播可能有短暂延迟。</p>
+      <button onclick="rotateCurrentUserToken()" class="btn btn-warning w-full">轮换并复制新的 Materialized 链接</button>
     </div>
 
     <hr class="my-3">
@@ -239,6 +231,16 @@
         <input type="checkbox" id="ue-enabled" class="sr-only peer">
         <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
       </label>
+    </div>
+
+    <hr class="my-3">
+
+    <div class="mb-4 flex items-center justify-between">
+      <div>
+        <label class="text-sm font-medium text-gray-700">允许 Provider / Merge</label>
+        <p class="text-xs text-red-500">高风险：接收者可读取原始机场订阅 URL</p>
+      </div>
+      <input type="checkbox" id="ue-provider-mode" class="h-4 w-4">
     </div>
 
     <hr class="my-3">
@@ -301,8 +303,8 @@
       </div>
       <div class="flex items-center justify-between">
         <div>
-          <label class="block text-sm text-gray-600">本地拉取模式</label>
-          <span class="text-xs text-gray-400">CF 无法拉取时，由用户客户端直接拉取（proxy-provider）</span>
+          <label class="block text-sm text-gray-600">受信任镜像模式</label>
+          <span class="text-xs text-gray-400">CF 无法拉取时，由受信任抓取器用 HMAC 上传缓存；不会把机场 URL 交给客户端</span>
         </div>
         <label class="relative inline-flex items-center cursor-pointer">
           <input type="checkbox" id="edit-local-fetch" class="sr-only peer">
@@ -423,8 +425,7 @@
         <span class="text-xs subtle">每个 Token 对应一套可控订阅入口</span>
       </div>
       <div class="flex gap-2 flex-wrap">
-        <input id="new-user-token" placeholder="Token (自定义)" class="flex-1 px-3 py-2 border rounded text-sm">
-        <input id="new-user-name" placeholder="备注名" class="flex-1 px-3 py-2 border rounded text-sm">
+        <input id="new-user-name" placeholder="备注名（token 由服务端随机生成）" class="flex-1 px-3 py-2 border rounded text-sm">
         <button onclick="addUser()" class="btn btn-primary">添加用户</button>
       </div>
     </div>
@@ -551,39 +552,30 @@ uuid: xxx
     <!-- 基础脚本 (来自外部链接) -->
     <div class="panel panel-pad mb-4">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="panel-title">基础脚本 (来自外部链接)</h3>
+        <h3 class="panel-title">Legacy 客户端脚本（不参与 Materialized）</h3>
         <div class="flex gap-2 items-center">
           <button onclick="copyScriptUrl()" class="btn btn-muted">复制脚本链接</button>
-          <label class="btn btn-muted cursor-pointer">
-            导入脚本
-            <input type="file" accept=".js" class="hidden" onchange="importScriptFile(this)">
-          </label>
           <button onclick="exportBaseScript()" class="btn btn-muted">导出脚本</button>
         </div>
       </div>
-      <div class="flex gap-2 mb-3 items-center">
-        <input id="script-url" placeholder="外部脚本 URL (如 GitHub raw 链接)" class="flex-1 px-3 py-2 border rounded text-sm font-mono">
-        <button onclick="syncScriptFromUrl()" class="btn btn-success">同步</button>
-        <button onclick="saveScriptUrl()" class="btn btn-primary">保存链接</button>
-      </div>
-      <p class="text-xs text-gray-400 mb-3">基础脚本现在按需手动同步，不会覆盖下方的自定义追加脚本。</p>
+      <p class="text-xs text-gray-400 mb-3">/script.js 与单链接 Materialized 都只使用随 Worker 构建、经过审计的脚本；生产 KV 中的旧脚本文本不会被执行或公开。</p>
       <button onclick="toggleBaseScript()" class="btn-link mb-2" id="btn-toggle-base">
         ▶ 查看基础脚本内容
       </button>
       <div id="base-script-wrap" class="hidden cm-base"></div>
     </div>
 
-    <!-- 自定义追加脚本 -->
+    <!-- 动态脚本停用说明 -->
     <div class="panel panel-pad">
       <div class="flex items-center justify-between mb-3">
-        <h3 class="panel-title">自定义追加脚本</h3>
+        <h3 class="panel-title">动态脚本覆盖（已停用）</h3>
         <div class="flex gap-2 items-center">
-          <button id="btn-edit-script" onclick="toggleEditScript()" class="btn btn-warning">编辑</button>
+          <button id="btn-edit-script" class="btn btn-muted hidden" disabled>已停用</button>
           <button id="btn-save-script" onclick="saveScript()" class="btn btn-primary hidden">保存</button>
           <button id="btn-cancel-script" onclick="cancelEditScript()" class="btn btn-muted hidden">取消</button>
         </div>
       </div>
-      <p class="text-xs text-gray-400 mb-3">执行顺序：基础脚本 → 自定义脚本。自定义脚本不会被外部同步覆盖。</p>
+      <p class="text-xs text-gray-500 mb-3">Workers 请求路径不再使用 eval/new Function。后续可调项会迁移到经过 schema 校验的 YAML/JSON 策略设置。</p>
       <button onclick="toggleOverrideScript()" class="btn-link mb-2" id="btn-toggle-override">
         ▶ 查看自定义脚本内容
       </button>
@@ -597,24 +589,30 @@ uuid: xxx
 
 <script>
 const BASE = location.origin;
-let KEY = localStorage.getItem('admin_key') || '';
 
 // ==================== Auth ====================
-function login() {
-  KEY = document.getElementById('password-input').value;
-  api('/api/users').then(r => {
-    if (r.ok) {
-      localStorage.setItem('admin_key', KEY);
-      showDashboard();
-    } else {
-      alert('密码错误');
-    }
+async function login() {
+  const input = document.getElementById('password-input');
+  const password = input.value;
+  const response = await fetch(BASE + '/api/admin/session', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Authorization': `Bearer ${password}` },
   });
+  input.value = '';
+  if (response.ok) showDashboard();
+  else alert('密码错误');
 }
 
-function logout() {
-  KEY = '';
-  localStorage.removeItem('admin_key');
+async function logout() {
+  await fetch(BASE + '/api/admin/session', {
+    method: 'DELETE',
+    credentials: 'same-origin',
+  }).catch(() => {});
+  showLogin();
+}
+
+function showLogin() {
   document.getElementById('dashboard').classList.add('hidden');
   document.getElementById('login-page').classList.remove('hidden');
 }
@@ -638,20 +636,30 @@ function showDashboard() {
 
 // ==================== API Helper ====================
 async function api(path, opts = {}) {
-  const headers = { 'Authorization': `Bearer ${KEY}`, ...opts.headers };
+  const headers = { ...opts.headers };
   if (opts.body && typeof opts.body === 'object') {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  const r = await fetch(BASE + path, { ...opts, headers });
+  const r = await fetch(BASE + path, {
+    ...opts,
+    headers,
+    credentials: 'same-origin',
+  });
+  if (r.status === 401 && path !== '/api/admin/session') {
+    showLogin();
+  }
   return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
 }
 
 function toast(msg, ok = true) {
   const el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = `toast px-4 py-2 rounded shadow-lg text-white ${ok ? 'bg-green-500' : 'bg-red-500'}`;
-  setTimeout(() => el.classList.add('hidden'), 2500);
+  const tone = ok === 'warning'
+    ? 'bg-amber-500'
+    : (ok ? 'bg-green-500' : 'bg-red-500');
+  el.className = `toast px-4 py-2 rounded shadow-lg text-white ${tone}`;
+  setTimeout(() => el.classList.add('hidden'), ok === 'warning' ? 7000 : 2500);
 }
 
 function setText(id, value) {
@@ -704,7 +712,7 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
 
 // ==================== Users ====================
 let _usersData = [];
-let _ueToken = '';
+let _ueUserId = '';
 
 async function loadUsers() {
   const { data } = await api('/api/users');
@@ -714,32 +722,31 @@ async function loadUsers() {
   if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-8 text-gray-400 text-center">暂无用户</td></tr>'; return; }
   tbody.innerHTML = data.map(u => `
     <tr>
-      <td class="px-4 py-3 font-mono text-xs">${esc(u.token)}</td>
+      <td class="px-4 py-3 font-mono text-xs">${esc(u.tokenPrefix)}…${u.legacyToken ? ' <span class="status-pill status-warn">待轮换</span>' : ''}</td>
       <td class="px-4 py-3">${esc(u.name)}</td>
       <td class="px-4 py-3">${u.enabled
         ? '<span class="status-pill status-ok">启用</span>'
         : '<span class="status-pill status-error">禁用</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="copySubUrl('${esc(u.token)}', 'full')" class="btn-link">Provider</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'materialized')" class="btn-link green">直连YAML</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'merge')" class="btn-link amber">Merge</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'nodes')" class="btn-link">纯节点</button>
-        <button onclick="copySubUrl('${esc(u.token)}', 'script')" class="btn-link">脚本</button>
+        <button data-user-id="${attr(u.id)}" onclick="rotateUserToken(this.dataset.userId)" class="btn-link amber">轮换链接</button>
       </td>
       <td class="px-4 py-3">
-        <button onclick="openUserEditModal('${esc(u.token)}')" class="btn btn-muted">编辑</button>
+        <button data-user-id="${attr(u.id)}" onclick="openUserEditModal(this.dataset.userId)" class="btn btn-muted">编辑</button>
       </td>
     </tr>
   `).join('');
 }
 
 async function addUser() {
-  const token = document.getElementById('new-user-token').value.trim();
   const name = document.getElementById('new-user-name').value.trim();
-  if (!token || !name) return toast('请填写 Token 和备注', false);
-  const { ok, data } = await api('/api/users', { method: 'POST', body: { token, name } });
+  if (!name) return toast('请填写备注名', false);
+  const { ok, data } = await api('/api/users', { method: 'POST', body: { name } });
   toast(ok ? '添加成功' : (data?.error || '添加失败'), ok);
-  if (ok) { document.getElementById('new-user-token').value = ''; document.getElementById('new-user-name').value = ''; loadUsers(); }
+  if (ok) {
+    document.getElementById('new-user-name').value = '';
+    showIssuedSubscription(name, data.token);
+    loadUsers();
+  }
 }
 
 function copySubUrl(token, mode) {
@@ -751,25 +758,46 @@ function copySubUrl(token, mode) {
     url = `${BASE}/merge/${token}`;
     msg = 'Merge 覆写链接已复制';
   } else if (mode === 'materialized') {
-    url = `${BASE}/sub/${token}?mode=materialized`;
+    url = `${BASE}/sub/${token}`;
     msg = '直连 YAML 链接已复制';
   } else if (mode === 'nodes') {
     url = `${BASE}/sub/${token}?mode=nodes`;
     msg = '纯节点链接已复制';
   } else {
-    url = `${BASE}/sub/${token}`;
+    url = `${BASE}/sub/${token}?mode=provider`;
     msg = 'Provider 配置链接已复制';
   }
   navigator.clipboard.writeText(url);
   toast(msg);
 }
 
-async function openUserEditModal(token) {
-  _ueToken = token;
-  const user = _usersData.find(u => u.token === token);
+function showIssuedSubscription(name, token) {
+  const url = `${BASE}/sub/${token}`;
+  navigator.clipboard.writeText(url).catch(() => {});
+  window.prompt(`${name} 的 Materialized 链接只显示一次，已尝试复制到剪贴板：`, url);
+}
+
+async function rotateUserToken(userId) {
+  const user = _usersData.find(item => item.id === userId);
+  if (!user || !confirm(`轮换 ${user.name} 的订阅链接？旧链接会失效，但跨地域传播可能有短暂延迟。`)) return;
+  const { ok, data } = await api(`/api/users/${encodeURIComponent(userId)}/rotate`, { method: 'POST' });
+  if (!ok) return toast(data?.error || '轮换失败', false);
+  showIssuedSubscription(user.name, data.token);
+  toast('新链接已生成，旧链接已失效');
+  loadUsers();
+}
+
+function rotateCurrentUserToken() {
+  rotateUserToken(_ueUserId);
+}
+
+async function openUserEditModal(userId) {
+  _ueUserId = userId;
+  const user = _usersData.find(u => u.id === userId);
   if (!user) return;
-  document.getElementById('ue-name').textContent = `${user.name} (${token})`;
+  document.getElementById('ue-name').textContent = `${user.name} (${user.tokenPrefix}…)`;
   document.getElementById('ue-enabled').checked = user.enabled;
+  document.getElementById('ue-provider-mode').checked = user.allowProviderMode === true;
 
   const [upRes, nodeRes] = await Promise.all([
     api('/api/upstreams'),
@@ -786,9 +814,9 @@ async function openUserEditModal(token) {
     : upstreams.map(u => {
         const checked = user.allowedUpstreams == null || user.allowedUpstreams.includes(u.name);
         return `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
-          <input type="checkbox" class="perm-up-cb" value="${esc(u.name)}" ${checked ? 'checked' : ''}>
+          <input type="checkbox" class="perm-up-cb" value="${attr(u.name)}" ${checked ? 'checked' : ''}>
           <span class="text-sm">${esc(u.name)}</span>
-          <span class="text-xs text-gray-400 ml-auto">${u.nodeCount} 个节点</span>
+          <span class="text-xs text-gray-400 ml-auto">${esc(u.nodeCount)} 个节点</span>
         </label>`;
       }).join('');
 
@@ -797,9 +825,9 @@ async function openUserEditModal(token) {
     : customNodes.map(n => {
         const checked = user.allowedCustomNodes == null || user.allowedCustomNodes.includes(n.name);
         return `<label class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer">
-          <input type="checkbox" class="perm-node-cb" value="${esc(n.name)}" ${checked ? 'checked' : ''}>
+          <input type="checkbox" class="perm-node-cb" value="${attr(n.name)}" ${checked ? 'checked' : ''}>
           <span class="text-sm">${esc(n.name)}</span>
-          <span class="text-xs text-gray-400 ml-auto">${n.type}</span>
+          <span class="text-xs text-gray-400 ml-auto">${esc(n.type)}</span>
         </label>`;
       }).join('');
 
@@ -817,6 +845,7 @@ function permToggleAll(type, checked) {
 
 async function saveUserEdit() {
   const enabled = document.getElementById('ue-enabled').checked;
+  const allowProviderMode = document.getElementById('ue-provider-mode').checked;
   const upCbs = document.querySelectorAll('.perm-up-cb');
   const nodeCbs = document.querySelectorAll('.perm-node-cb');
 
@@ -826,8 +855,8 @@ async function saveUserEdit() {
   const allowedUpstreams = allUpChecked ? null : [...upCbs].filter(cb => cb.checked).map(cb => cb.value);
   const allowedCustomNodes = allNodeChecked ? null : [...nodeCbs].filter(cb => cb.checked).map(cb => cb.value);
 
-  const { ok, data } = await api(`/api/users/${encodeURIComponent(_ueToken)}`, {
-    method: 'PUT', body: { enabled, allowedUpstreams, allowedCustomNodes }
+  const { ok, data } = await api(`/api/users/${encodeURIComponent(_ueUserId)}`, {
+    method: 'PUT', body: { enabled, allowProviderMode, allowedUpstreams, allowedCustomNodes }
   });
   if (ok) {
     toast('已保存');
@@ -839,8 +868,9 @@ async function saveUserEdit() {
 }
 
 async function delUserFromModal() {
-  if (!confirm(`确认删除用户 ${_ueToken}？`)) return;
-  const { ok } = await api(`/api/users/${encodeURIComponent(_ueToken)}`, { method: 'DELETE' });
+  const user = _usersData.find(item => item.id === _ueUserId);
+  if (!user || !confirm(`确认删除用户 ${user.name}？`)) return;
+  const { ok } = await api(`/api/users/${encodeURIComponent(_ueUserId)}`, { method: 'DELETE' });
   if (ok) {
     toast('已删除');
     closeUserEditModal();
@@ -862,7 +892,7 @@ function renderUACheckboxes(containerId, selectedUA) {
   el.innerHTML = UA_PRESETS.map(ua => {
     const checked = selected.includes(ua) ? 'checked' : '';
     return `<label class="flex items-center gap-1 text-xs bg-gray-50 border rounded px-2 py-1 cursor-pointer hover:bg-blue-50">
-      <input type="checkbox" class="ua-cb" value="${ua}" ${checked}> ${ua}
+      <input type="checkbox" class="ua-cb" value="${attr(ua)}" ${checked}> ${esc(ua)}
     </label>`;
   }).join('');
 }
@@ -917,9 +947,9 @@ async function testEditUpstream() {
   el.innerHTML = '<span class="text-gray-500">测试中...</span>';
   const { data } = await api('/api/upstreams/test', { method: 'POST', body: { url, userAgent: ua || 'clash.meta' } });
   if (data?.ok) {
-    el.innerHTML = `<span class="text-green-600">成功! ${data.nodeCount} 个节点</span>`;
+    el.innerHTML = `<span class="text-green-600">成功! ${esc(data.nodeCount)} 个节点</span>`;
   } else {
-    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+    el.innerHTML = `<span class="text-red-500">失败: ${esc(data?.error || '未知错误')}</span>`;
   }
 }
 
@@ -948,37 +978,44 @@ async function loadUpstreams() {
   updateStats();
   if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
   tbody.innerHTML = data.map(u => `
-    <tr class="cursor-pointer" onclick="toggleUpstreamNodes('${esc(u.name)}')">
-      <td class="px-4 py-3 text-gray-400" id="arrow-${esc(u.name)}">&#9654;</td>
+    <tr class="cursor-pointer" data-upstream-name="${attr(u.name)}" onclick="toggleUpstreamNodes(this.dataset.upstreamName)">
+      <td class="px-4 py-3 text-gray-400" id="arrow-${attr(domId(u.name))}">&#9654;</td>
       <td class="px-4 py-3 font-semibold">${esc(u.name)}</td>
-      <td class="px-4 py-3">${u.nodeCount}</td>
+      <td class="px-4 py-3">${esc(u.nodeCount)}</td>
       <td class="px-4 py-3 text-gray-500 text-xs">${u.lastUpdate ? new Date(u.lastUpdate).toLocaleString() : '-'}</td>
-      <td class="px-4 py-3">${u.localFetch
-        ? '<span class="status-pill status-muted">本地拉取</span>'
-        : (u.lastError
-          ? '<span class="status-pill status-error">' + esc(u.lastError) + '</span>'
-          : (u.lastUpdate ? '<span class="status-pill status-ok">正常</span>' : '<span class="status-pill status-warn">未同步</span>'))}</td>
+      <td class="px-4 py-3">${u.fetchMode === 'mirror'
+        ? '<span class="status-pill status-muted">镜像拉取</span>'
+        : u.fetchMode === 'disabled'
+          ? '<span class="status-pill status-warn">已停用</span>'
+          : (u.lastError
+            ? '<span class="status-pill status-error">' + esc(u.lastError)
+              + (u.nextRetryAt ? '<br><span class="text-xs">下次重试 ' + new Date(u.nextRetryAt).toLocaleString() + '</span>' : '')
+              + '</span>'
+            : (u.cacheStale
+              ? '<span class="status-pill status-warn">缓存陈旧</span>'
+              : (u.lastUpdate ? '<span class="status-pill status-ok">正常</span>' : '<span class="status-pill status-warn">未同步</span>')))}</td>
       <td class="px-4 py-3 flex gap-3 whitespace-nowrap" onclick="event.stopPropagation()">
-        <button onclick="refreshOne('${esc(u.name)}')" class="btn-link green whitespace-nowrap">刷新</button>
-        <button onclick="testExisting('${esc(u.name)}')" class="btn-link amber whitespace-nowrap">测试</button>
-        <button onclick="editUpstream('${esc(u.name)}')" class="btn-link whitespace-nowrap">编辑</button>
+        <button data-upstream-name="${attr(u.name)}" onclick="refreshOne(this.dataset.upstreamName)" class="btn-link green whitespace-nowrap">刷新</button>
+        <button data-upstream-name="${attr(u.name)}" onclick="testExisting(this.dataset.upstreamName)" class="btn-link amber whitespace-nowrap">测试</button>
+        <button data-upstream-name="${attr(u.name)}" onclick="editUpstream(this.dataset.upstreamName)" class="btn-link whitespace-nowrap">编辑</button>
       </td>
     </tr>
-    <tr id="nodes-row-${esc(u.name)}" class="hidden">
+    <tr id="nodes-row-${attr(domId(u.name))}" class="hidden">
       <td colspan="6" class="px-4 py-2 bg-gray-50">
         <div class="flex items-center gap-2 mb-2">
-          <span id="nodes-summary-${esc(u.name)}" class="text-xs text-gray-500">加载中...</span>
-          <button onclick="event.stopPropagation(); testAllUpstreamNodes('${esc(u.name)}')" class="btn btn-warning !min-h-0 !py-1 !px-2 text-xs">全部测速</button>
+          <span id="nodes-summary-${attr(domId(u.name))}" class="text-xs text-gray-500">加载中...</span>
+          <button data-upstream-name="${attr(u.name)}" onclick="event.stopPropagation(); testAllUpstreamNodes(this.dataset.upstreamName)" class="btn btn-warning !min-h-0 !py-1 !px-2 text-xs">全部测速</button>
         </div>
-        <div id="nodes-list-${esc(u.name)}" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>
+        <div id="nodes-list-${attr(domId(u.name))}" class="grid gap-2" style="grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));"></div>
       </td>
     </tr>
   `).join('');
 }
 
 async function toggleUpstreamNodes(name) {
-  const row = document.getElementById(`nodes-row-${name}`);
-  const arrow = document.getElementById(`arrow-${name}`);
+  const key = domId(name);
+  const row = document.getElementById(`nodes-row-${key}`);
+  const arrow = document.getElementById(`arrow-${key}`);
   if (!row.classList.contains('hidden')) {
     row.classList.add('hidden');
     arrow.innerHTML = '&#9654;';
@@ -986,15 +1023,10 @@ async function toggleUpstreamNodes(name) {
   }
   row.classList.remove('hidden');
   arrow.innerHTML = '&#9660;';
-  const summary = document.getElementById(`nodes-summary-${name}`);
-  const el = document.getElementById(`nodes-list-${name}`);
+  const summary = document.getElementById(`nodes-summary-${key}`);
+  const el = document.getElementById(`nodes-list-${key}`);
   summary.textContent = '加载中...';
   el.innerHTML = '';
-  const upstream = _upstreamsData.find(u => u.name === name);
-  if (upstream?.localFetch) {
-    summary.textContent = '本地拉取模式：节点由用户客户端直接拉取，此处无缓存';
-    return;
-  }
   const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/nodes`);
   if (!data || !data.nodes || data.nodes.length === 0) {
     summary.textContent = '暂无缓存节点（请先刷新）';
@@ -1003,12 +1035,13 @@ async function toggleUpstreamNodes(name) {
   summary.textContent = `共 ${data.total} 个节点，过滤后 ${data.filtered} 个`;
   el.innerHTML = data.nodes.map(n => `
     <div class="bg-white border border-slate-200 rounded-lg px-3 py-2 flex items-center justify-between cursor-pointer hover:shadow-sm transition-shadow"
-         onclick="event.stopPropagation(); testOneUpstreamNode('${esc(name)}', '${esc(n.name)}', this)">
+         data-upstream-name="${attr(name)}" data-node-name="${attr(n.name)}"
+         onclick="event.stopPropagation(); testOneUpstreamNode(this.dataset.upstreamName, this.dataset.nodeName, this)">
       <div class="min-w-0 flex-1 mr-2">
         <div class="text-sm font-medium truncate">${esc(n.name)}</div>
         <div class="flex gap-1 mt-0.5">
           <span class="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-gray-500">${esc(n.type)}</span>
-          <span class="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-gray-400">${n.port}</span>
+          <span class="text-[10px] px-1.5 py-0 rounded bg-gray-100 text-gray-400">${esc(n.port)}</span>
         </div>
       </div>
       <span class="node-latency text-sm font-semibold whitespace-nowrap"></span>
@@ -1039,8 +1072,8 @@ async function testOneUpstreamNode(upstreamName, nodeName, cardEl) {
 }
 
 async function testAllUpstreamNodes(upstreamName) {
-  const el = document.getElementById(`nodes-list-${upstreamName}`);
-  const cards = el.querySelectorAll('[onclick]');
+  const el = document.getElementById(`nodes-list-${domId(upstreamName)}`);
+  const cards = el.querySelectorAll('[data-node-name]');
   for (const card of cards) {
     card.click();
   }
@@ -1054,9 +1087,9 @@ async function testNewUpstream() {
   el.innerHTML = '<span class="text-gray-500">测试中...</span>';
   const { data } = await api('/api/upstreams/test', { method: 'POST', body: { url, userAgent: 'clash.meta' } });
   if (data?.ok) {
-    el.innerHTML = `<span class="text-green-600">成功! 解析到 ${data.nodeCount} 个节点</span><br><span class="text-gray-500">预览: ${data.preview.join(', ')}</span>`;
+    el.innerHTML = `<span class="text-green-600">成功! 解析到 ${esc(data.nodeCount)} 个节点</span><br><span class="text-gray-500">预览: ${esc(data.preview.join(', '))}</span>`;
   } else {
-    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+    el.innerHTML = `<span class="text-red-500">失败: ${esc(data?.error || '未知错误')}</span>`;
   }
 }
 
@@ -1116,11 +1149,11 @@ async function loadNodes() {
       <td class="px-4 py-3 font-semibold">${esc(n.name)}</td>
       <td class="px-4 py-3">${esc(n.type)}</td>
       <td class="px-4 py-3 font-mono text-xs">${esc(n.server)}</td>
-      <td class="px-4 py-3">${n.port}</td>
-      <td class="px-4 py-3" id="node-status-${esc(n.name)}">${_nodeStatus[n.name] || '<span class="status-pill status-muted">未测试</span>'}</td>
+      <td class="px-4 py-3">${esc(n.port)}</td>
+      <td class="px-4 py-3" id="node-status-${attr(domId(n.name))}">${_nodeStatus[n.name] || '<span class="status-pill status-muted">未测试</span>'}</td>
       <td class="px-4 py-3 flex gap-2">
-        <button onclick="testExistingNodeBtn('${esc(n.name)}')" class="btn-link amber">测试</button>
-        <button onclick="editNode('${esc(n.name)}')" class="btn-link">编辑</button>
+        <button data-node-name="${attr(n.name)}" onclick="testExistingNodeBtn(this.dataset.nodeName)" class="btn-link amber">测试</button>
+        <button data-node-name="${attr(n.name)}" onclick="editNode(this.dataset.nodeName)" class="btn-link">编辑</button>
       </td>
     </tr>
   `).join('');
@@ -1142,9 +1175,9 @@ async function testNewNode() {
   el.innerHTML = '<span class="text-gray-500">测试中...</span>';
   const { data } = await api('/api/custom-nodes/test', { method: 'POST', body: { yaml: yamlText } });
   if (data?.ok) {
-    el.innerHTML = `<span class="text-green-600">连通! 延迟 ${data.latency}ms</span>`;
+    el.innerHTML = `<span class="text-green-600">连通! 延迟 ${esc(data.latency)}ms</span>`;
   } else {
-    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+    el.innerHTML = `<span class="text-red-500">失败: ${esc(data?.error || '未知错误')}</span>`;
   }
 }
 
@@ -1156,12 +1189,12 @@ async function testAllNodes() {
 }
 
 async function testExistingNodeBtn(name) {
-  const el = document.getElementById(`node-status-${name}`);
+  const el = document.getElementById(`node-status-${domId(name)}`);
   if (el) el.innerHTML = '<span class="status-pill status-muted">测试中...</span>';
   const { data } = await api(`/api/custom-nodes/${encodeURIComponent(name)}/test`, { method: 'POST' });
   const html = data?.ok
-    ? `<span class="status-pill status-ok">连通 ${data.latency}ms</span>`
-    : `<span class="status-pill status-error">${data?.error || '失败'}</span>`;
+    ? `<span class="status-pill status-ok">连通 ${esc(data.latency)}ms</span>`
+    : `<span class="status-pill status-error">${esc(data?.error || '失败')}</span>`;
   _nodeStatus[name] = html;
   if (el) el.innerHTML = html;
 }
@@ -1174,7 +1207,7 @@ function editNode(name) {
   if (!node) return;
   _editingNodeName = name;
   document.getElementById('node-edit-name').textContent = name;
-  document.getElementById('node-edit-yaml').value = jsyaml.dump(node, { lineWidth: -1, noRefs: true, quotingType: '"' });
+  document.getElementById('node-edit-yaml').value = JSON.stringify(node, null, 2);
   document.getElementById('node-edit-test-result').classList.add('hidden');
   document.getElementById('node-edit-modal').classList.remove('hidden');
 }
@@ -1192,9 +1225,9 @@ async function testNodeInModal() {
   el.innerHTML = '<span class="text-gray-500">测试中...</span>';
   const { data } = await api('/api/custom-nodes/test', { method: 'POST', body: { yaml: yamlText } });
   if (data?.ok) {
-    el.innerHTML = `<span class="text-green-600">连通! 延迟 ${data.latency}ms</span>`;
+    el.innerHTML = `<span class="text-green-600">连通! 延迟 ${esc(data.latency)}ms</span>`;
   } else {
-    el.innerHTML = `<span class="text-red-500">失败: ${data?.error || '未知错误'}</span>`;
+    el.innerHTML = `<span class="text-red-500">失败: ${esc(data?.error || '未知错误')}</span>`;
   }
 }
 
@@ -1250,7 +1283,7 @@ async function loadScript() {
   _cmOverride.setValue(data?.override || '');
   _overrideBackup = data?.override || '';
   _cmOverride.setOption('readOnly', true);
-  document.getElementById('btn-edit-script').classList.remove('hidden');
+  document.getElementById('btn-edit-script').classList.add('hidden');
   document.getElementById('btn-save-script').classList.add('hidden');
   document.getElementById('btn-cancel-script').classList.add('hidden');
 }
@@ -1338,19 +1371,70 @@ async function importMergeFile(input) {
   const file = input.files[0];
   if (!file) return;
   const text = await file.text();
-  const { ok, data } = await api('/api/import/merge', { method: 'POST', body: { yaml: text } });
-  if (ok) {
-    toast(`导入成功: ${data.upstreamCount} 个订阅, ${data.nodeCount} 个节点`);
+  const previewResponse = await api('/api/import/merge', {
+    method: 'POST',
+    body: { yaml: text, action: 'preview' }
+  });
+  if (!previewResponse.ok) {
+    toast(previewResponse.data?.error || '预览失败', false);
+    input.value = '';
+    return;
+  }
+
+  const preview = previewResponse.data;
+  if (!preview.diff?.hasChanges) {
+    toast('远端配置已经与导入文件一致');
+    input.value = '';
+    return;
+  }
+
+  const diffLine = (label, diff) =>
+    `${label}: +${diff.added.length} / ~${diff.updated.length} / -${diff.deleted.length}`;
+  const details = [
+    '将以导入文件全量替换远端配置：',
+    diffLine('机场', preview.diff.upstreams),
+    diffLine('自建节点', preview.diff.customNodes),
+    `策略设置: ${preview.diff.policyChangedFields.length} 项变更`,
+    '',
+    `替换后共 ${preview.counts.upstreams} 个机场、${preview.counts.customNodes} 个自建节点。`,
+    '删除项会从活动配置移除；旧 revision 会保留作审计快照，当前版本尚未提供一键回滚 API。',
+  ].join('\n');
+
+  if (!confirm(details)) {
+    toast('已取消导入');
+    input.value = '';
+    return;
+  }
+
+  const applyResponse = await api('/api/import/merge', {
+    method: 'POST',
+    body: {
+      yaml: text,
+      action: 'apply',
+      strategy: 'replace',
+      baseRevision: preview.baseRevision,
+    }
+  });
+  if (applyResponse.ok) {
+    const warnings = applyResponse.data?.cacheWarnings || [];
+    if (warnings.length) {
+      toast(
+        `配置已同步，但这些机场尚无可用缓存：${warnings.join('、')}。正式切换前请刷新或上传镜像。`,
+        'warning'
+      );
+    } else {
+      toast(`同步成功: ${preview.counts.upstreams} 个机场, ${preview.counts.customNodes} 个节点`);
+    }
     loadUpstreams();
     loadNodes();
   } else {
-    toast(data?.error || '导入失败', false);
+    toast(applyResponse.data?.error || '同步失败，请重新预览', false);
   }
   input.value = '';
 }
 
 async function exportMergeFile() {
-  const resp = await fetch(BASE + '/api/export/merge', { headers: { 'Authorization': `Bearer ${KEY}` } });
+  const resp = await fetch(BASE + '/api/export/merge', { credentials: 'same-origin' });
   const text = await resp.text();
   download('merge.yaml', text, 'text/yaml');
   toast('Merge 配置已导出');
@@ -1366,7 +1450,8 @@ async function importScriptFile(input) {
   // 简单方案：导入到基础脚本位置
   const resp = await fetch(BASE + '/api/script/import-base', {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ base: text }),
   });
   if (resp.ok) {
@@ -1398,12 +1483,20 @@ function download(filename, content, type) {
 }
 
 // ==================== Utils ====================
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-
-// Auto login
-if (KEY) {
-  api('/api/users').then(r => { if (r.ok) showDashboard(); });
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function attr(s) {
+  return String(s ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;');
 }
+function domId(s) { return encodeURIComponent(String(s ?? '')); }
+
+// Auto login with a short-lived HttpOnly cookie; the long-term password is
+// never stored in browser JavaScript storage.
+api('/api/admin/session').then(r => { if (r.ok) showDashboard(); });
 </script>
 </body>
 </html>

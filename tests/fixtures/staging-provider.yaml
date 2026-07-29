@@ -1,0 +1,14 @@
+proxies:
+  - name: "US fixture mirror"
+    type: ss
+    server: 203.0.113.60
+    port: 443
+    cipher: aes-128-gcm
+    password: "fixture-provider-password-a"
+
+  - name: "JP fixture mirror"
+    type: trojan
+    server: 203.0.113.61
+    port: 443
+    password: "fixture-provider-password-b"
+    sni: fixture-trojan.invalid

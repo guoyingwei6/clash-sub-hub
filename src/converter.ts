@@ -1,5 +1,5 @@
-import yaml from 'js-yaml';
 import { ProxyNode } from './types';
+import { parseYaml, stringifyYaml } from './yaml';
 
 const FILTER_REGEX = /官网|套餐|流量|异常|剩余|ISP|all|免费|低倍率|0\.[0-9]x|测试|到期/i;
 
@@ -26,13 +26,11 @@ export function parseClashYaml(text: string): ProxyNode[] {
 
 function tryParseYaml(text: string): ProxyNode[] {
   try {
-    const doc = yaml.load(text) as Record<string, unknown>;
+    const doc = parseYaml<Record<string, unknown>>(text);
     if (!doc) return [];
     const proxies = doc.proxies || doc.Proxy;
     if (!Array.isArray(proxies)) return [];
-    return proxies.filter(
-      (p): p is ProxyNode => p && typeof p === 'object' && 'name' in p && 'type' in p
-    );
+    return proxies.filter(isProxyNode);
   } catch {
     return [];
   }
@@ -50,14 +48,35 @@ function parseUriList(text: string): ProxyNode[] {
 
 function parseUri(uri: string): ProxyNode | null {
   try {
-    if (uri.startsWith('vmess://')) return parseVmessUri(uri);
-    if (uri.startsWith('vless://')) return parseVlessUri(uri);
-    if (uri.startsWith('ss://')) return parseSsUri(uri);
-    if (uri.startsWith('trojan://')) return parseTrojanUri(uri);
-    if (uri.startsWith('hysteria2://') || uri.startsWith('hy2://')) return parseHy2Uri(uri);
-    if (uri.startsWith('tuic://')) return parseTuicUri(uri);
+    let node: ProxyNode | null = null;
+    if (uri.startsWith('vmess://')) node = parseVmessUri(uri);
+    else if (uri.startsWith('vless://')) node = parseVlessUri(uri);
+    else if (uri.startsWith('ss://')) node = parseSsUri(uri);
+    else if (uri.startsWith('trojan://')) node = parseTrojanUri(uri);
+    else if (uri.startsWith('hysteria2://') || uri.startsWith('hy2://')) {
+      node = parseHy2Uri(uri);
+    } else if (uri.startsWith('tuic://')) node = parseTuicUri(uri);
+    return isProxyNode(node) ? node : null;
   } catch { /* 解析失败跳过 */ }
   return null;
+}
+
+export function isProxyNode(value: unknown): value is ProxyNode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const node = value as Record<string, unknown>;
+  return typeof node.name === 'string'
+    && node.name.trim().length > 0
+    && node.name.length <= 512
+    && typeof node.type === 'string'
+    && node.type.trim().length > 0
+    && node.type.length <= 64
+    && typeof node.server === 'string'
+    && node.server.trim().length > 0
+    && node.server.length <= 253
+    && typeof node.port === 'number'
+    && Number.isInteger(node.port)
+    && node.port >= 1
+    && node.port <= 65535;
 }
 
 function decodeFragment(uri: string): string {
@@ -224,7 +243,7 @@ export function deduplicateNodes(nodes: ProxyNode[]): ProxyNode[] {
 }
 
 export function nodesToClashYaml(nodes: ProxyNode[]): string {
-  return yaml.dump({ proxies: nodes }, { lineWidth: -1, noRefs: true });
+  return stringifyYaml({ proxies: nodes });
 }
 
 export function nodesToBase64(nodes: ProxyNode[]): string {

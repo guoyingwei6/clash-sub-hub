@@ -1,46 +1,55 @@
-import { Env, Upstream, GlobalSettings } from './types';
+import { Env, GlobalSettings, UpstreamRuntimeState } from './types';
+import { UpstreamDefinition } from './domain/config';
+import { canAttemptRefresh, nextRetryAt } from './domain/cache-policy';
 import { parseClashYaml } from './converter';
 import { getGlobalSettings } from './settings';
+import { loadActiveDesiredConfig } from './storage/config-state';
+import {
+  getUpstreamState,
+  putUpstreamCache,
+  putUpstreamState,
+  upstreamSourceFingerprint,
+} from './storage/upstream-cache';
+import {
+  MAX_PROVIDER_BYTES,
+  readResponseTextLimited,
+} from './limits';
+import { rebuildDefaultMaterializedArtifact } from './subscription';
 
-export async function handleScheduled(env: Env): Promise<void> {
-  // 同步外部脚本
-  const scriptUrl = await env.KV.get('script-url');
-  if (scriptUrl) {
-    try {
-      const resp = await fetch(scriptUrl, { signal: AbortSignal.timeout(15000) });
-      if (resp.ok) {
-        await env.KV.put('script-base', await resp.text());
-      }
-    } catch { /* 静默失败，保留旧脚本 */ }
-  }
+export interface RefreshSummary {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  artifactReady: boolean;
+}
 
+export async function handleScheduled(
+  env: Env,
+  options: { force?: boolean } = {}
+): Promise<RefreshSummary> {
   const settings = await getGlobalSettings(env);
-
-  // 同步上游订阅
-  const raw = await env.KV.get('upstreams');
-  if (!raw) return;
-
-  const upstreams: Upstream[] = JSON.parse(raw);
-  const updated: Upstream[] = [];
-
-  // 跳过本地拉取模式的上游
+  const config = await loadActiveDesiredConfig(env.KV);
+  const upstreams = config.upstreams
+    .filter((upstream) => upstream.fetchMode === 'server');
   const results = await Promise.allSettled(
-    upstreams.map((u) => u.localFetch ? Promise.resolve(u) : fetchUpstream(u, settings, env))
+    upstreams.map(
+      (upstream) => fetchUpstream(upstream, settings, env, { force: options.force })
+    )
   );
 
-  for (let i = 0; i < upstreams.length; i++) {
-    const result = results[i];
-    if (result.status === 'fulfilled') {
-      updated.push(result.value);
-    } else {
-      updated.push({
-        ...upstreams[i],
-        lastError: result.reason?.message || '未知错误',
-      });
-    }
+  if (results.some((result) => result.status === 'rejected')) {
+    console.error('部分上游刷新状态写入失败');
   }
-
-  await env.KV.put('upstreams', JSON.stringify(updated));
+  const succeeded = results.filter(
+    (result) => result.status === 'fulfilled' && !result.value.lastError
+  ).length;
+  const artifact = await rebuildDefaultMaterializedArtifact(env);
+  return {
+    attempted: upstreams.length,
+    succeeded,
+    failed: results.length - succeeded,
+    artifactReady: artifact.ok,
+  };
 }
 
 const FALLBACK_UAS = [
@@ -52,125 +61,158 @@ const FALLBACK_UAS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
 ];
+const MAX_UA_ATTEMPTS_PER_REFRESH = 2;
 
-export async function fetchUpstream(upstream: Upstream, settings: GlobalSettings, env: Env): Promise<Upstream> {
+export async function fetchUpstream(
+  upstream: UpstreamDefinition,
+  settings: GlobalSettings,
+  env: Env,
+  options: { force?: boolean; now?: () => Date } = {}
+): Promise<UpstreamRuntimeState> {
+  const now = options.now?.() ?? new Date();
+  const fingerprint = await upstreamSourceFingerprint(upstream);
+  const previous = await getUpstreamState(env.KV, upstream);
+
+  if (!canAttemptRefresh(previous, now, options.force)) {
+    return previous!;
+  }
+
   const timeout = (settings.fetchTimeout || 15) * 1000;
   const uaRaw = upstream.userAgent || settings.defaultUA || 'clash.meta';
-  const uas = uaRaw.split(',').map(s => s.trim()).filter(Boolean);
-  // 合并用户 UA + 备选 UA，去重
-  const allUAs = [...new Set([...uas, ...FALLBACK_UAS])];
-
+  const configuredUas = uaRaw.split(',').map((value) => value.trim()).filter(Boolean);
+  const allUAs = [...new Set([...configuredUas, ...FALLBACK_UAS])]
+    .slice(0, MAX_UA_ATTEMPTS_PER_REFRESH);
   const errors: string[] = [];
-  for (const ua of allUAs) {
+
+  for (const userAgent of allUAs) {
     try {
-      const isBrowser = ua.startsWith('Mozilla/');
-      const headers: Record<string, string> = {
-        'User-Agent': ua,
-        'Accept': isBrowser
-          ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-          : '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-      };
-      if (isBrowser) {
-        headers['Cache-Control'] = 'no-cache';
-        headers['Sec-Fetch-Dest'] = 'document';
-        headers['Sec-Fetch-Mode'] = 'navigate';
-        headers['Sec-Fetch-Site'] = 'none';
-        headers['Upgrade-Insecure-Requests'] = '1';
-      }
-      const resp = await fetch(upstream.url, {
-        headers,
+      const response = await fetch(upstream.url, {
+        headers: fetchHeaders(userAgent),
         redirect: 'follow',
         signal: AbortSignal.timeout(timeout),
       });
 
-      if (resp.ok) {
-        const text = await resp.text();
-        const nodes = parseClashYaml(text);
-        if (nodes.length === 0) {
-          errors.push(`${ua.slice(0, 20)}: 200 但解析 0 节点`);
-          continue;
-        }
-        await env.KV.put(`cache:${upstream.name}`, text);
-        return {
-          ...upstream,
-          localFetch: false,
-          lastUpdate: new Date().toISOString(),
-          nodeCount: nodes.length,
-          lastError: null,
-        };
+      if (!response.ok) {
+        errors.push(`${shortUserAgent(userAgent)}: HTTP ${response.status}`);
+        continue;
       }
-      errors.push(`${ua.slice(0, 20)}: HTTP ${resp.status}`);
-    } catch (e) {
-      errors.push(`${ua.slice(0, 20)}: ${(e as Error).message?.slice(0, 30) || '网络错误'}`);
+
+      const content = await readResponseTextLimited(response, MAX_PROVIDER_BYTES);
+      const nodes = parseClashYaml(content);
+      if (nodes.length === 0) {
+        errors.push(`${shortUserAgent(userAgent)}: 200 但解析 0 节点`);
+        continue;
+      }
+
+      const timestamp = now.toISOString();
+      await putUpstreamCache(env.KV, {
+        schemaVersion: 1,
+        upstreamId: upstream.id,
+        sourceFingerprint: fingerprint,
+        updatedAt: timestamp,
+        nodeCount: nodes.length,
+        content,
+      });
+      const state: UpstreamRuntimeState = {
+        upstreamId: upstream.id,
+        lastAttemptAt: timestamp,
+        lastSuccessAt: timestamp,
+        cacheUpdatedAt: timestamp,
+        nodeCount: nodes.length,
+        lastError: null,
+        consecutiveFailures: 0,
+        nextRetryAt: null,
+        sourceFingerprint: fingerprint,
+      };
+      await putUpstreamState(env.KV, state);
+      return state;
+    } catch (error) {
+      errors.push(`${shortUserAgent(userAgent)}: ${safeFetchError(error)}`);
     }
   }
 
-  // 只保留前3条错误详情，避免太长
-  const detail = errors.slice(0, 3).join('; ');
-  return {
-    ...upstream,
-    localFetch: true,
-    lastError: `全部 ${allUAs.length} 个 UA 失败，已切换本地拉取 (${detail})`,
+  const consecutiveFailures = (previous?.consecutiveFailures ?? 0) + 1;
+  const state: UpstreamRuntimeState = {
+    upstreamId: upstream.id,
+    lastAttemptAt: now.toISOString(),
+    lastSuccessAt: previous?.lastSuccessAt ?? null,
+    cacheUpdatedAt: previous?.cacheUpdatedAt ?? null,
+    nodeCount: previous?.nodeCount ?? 0,
+    lastError: `全部 ${allUAs.length} 个 UA 失败 (${errors.slice(0, 3).join('; ')})`,
+    consecutiveFailures,
+    nextRetryAt: nextRetryAt(now, consecutiveFailures),
+    sourceFingerprint: fingerprint,
   };
+  await putUpstreamState(env.KV, state);
+  return state;
 }
 
 export async function testUpstreamUrl(
   url: string,
   userAgent: string
 ): Promise<{ ok: boolean; nodeCount: number; preview: string[]; error?: string }> {
-  const uas = [userAgent || 'clash.meta', ...FALLBACK_UAS];
-  const uniqueUAs = [...new Set(uas.map(s => s.trim()).filter(Boolean))];
+  const uniqueUAs = [...new Set(
+    [userAgent || 'clash.meta', ...FALLBACK_UAS]
+      .map((value) => value.trim())
+      .filter(Boolean)
+  )].slice(0, MAX_UA_ATTEMPTS_PER_REFRESH);
   let lastError = '';
 
-  for (const ua of uniqueUAs) {
+  for (const candidate of uniqueUAs) {
     try {
-      const isBrowser = ua.startsWith('Mozilla/');
-      const headers: Record<string, string> = {
-        'User-Agent': ua,
-        'Accept': isBrowser
-          ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
-          : '*/*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Connection': 'keep-alive',
-      };
-      if (isBrowser) {
-        headers['Cache-Control'] = 'no-cache';
-        headers['Sec-Fetch-Dest'] = 'document';
-        headers['Sec-Fetch-Mode'] = 'navigate';
-        headers['Sec-Fetch-Site'] = 'none';
-        headers['Upgrade-Insecure-Requests'] = '1';
-      }
-      const resp = await fetch(url, {
-        headers,
+      const response = await fetch(url, {
+        headers: fetchHeaders(candidate),
         redirect: 'follow',
         signal: AbortSignal.timeout(15000),
       });
-
-      if (!resp.ok) {
-        lastError = `HTTP ${resp.status}`;
+      if (!response.ok) {
+        lastError = `HTTP ${response.status}`;
         continue;
       }
 
-      const text = await resp.text();
-      const nodes = parseClashYaml(text);
-
+      const nodes = parseClashYaml(await readResponseTextLimited(response, MAX_PROVIDER_BYTES));
       if (nodes.length === 0) {
         return { ok: false, nodeCount: 0, preview: [], error: '未解析到任何节点' };
       }
-
       return {
         ok: true,
         nodeCount: nodes.length,
-        preview: nodes.slice(0, 10).map((n) => n.name),
+        preview: nodes.slice(0, 10).map((node) => node.name),
       };
-    } catch (e) {
-      lastError = (e as Error).message;
+    } catch (error) {
+      lastError = safeFetchError(error);
     }
   }
 
   return { ok: false, nodeCount: 0, preview: [], error: lastError || '所有 UA 均失败' };
+}
+
+function fetchHeaders(userAgent: string): Record<string, string> {
+  const isBrowser = userAgent.startsWith('Mozilla/');
+  const headers: Record<string, string> = {
+    'User-Agent': userAgent,
+    Accept: isBrowser
+      ? 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      : '*/*',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+  };
+  if (isBrowser) {
+    headers['Cache-Control'] = 'no-cache';
+    headers['Sec-Fetch-Dest'] = 'document';
+    headers['Sec-Fetch-Mode'] = 'navigate';
+    headers['Sec-Fetch-Site'] = 'none';
+    headers['Upgrade-Insecure-Requests'] = '1';
+  }
+  return headers;
+}
+
+function shortUserAgent(userAgent: string): string {
+  return userAgent.slice(0, 20);
+}
+
+function safeFetchError(error: unknown): string {
+  if (!(error instanceof Error)) return '网络错误';
+  if (error.name === 'TimeoutError' || error.name === 'AbortError') return '连接超时';
+  if (error.name === 'PayloadTooLargeError') return '响应内容过大';
+  return '网络请求失败';
 }

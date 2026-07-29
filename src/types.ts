@@ -1,16 +1,24 @@
+export type DeploymentEnvironment = 'production' | 'staging';
+
 export interface Env {
   KV: KVNamespace;
   ADMIN_PASSWORD: string;
+  MIRROR_UPLOAD_SECRET?: string;
+  DEPLOYMENT_ENVIRONMENT?: DeploymentEnvironment;
 }
 
 export interface User {
-  token: string;
+  id?: string;
+  token?: string;           // legacy only; rotate to remove
+  tokenHash?: string;
+  tokenPrefix?: string;
   name: string;
   enabled: boolean;
   createdAt: string;
   allowedUpstreams?: string[] | null;   // null/undefined = 全部, [] = 无
   allowedCustomNodes?: string[] | null; // null/undefined = 全部, [] = 无
   filterNodes?: boolean | null;         // null/undefined = 跟随全局, true/false = 强制
+  allowProviderMode?: boolean;          // high risk: exposes upstream URLs
 }
 
 export interface Upstream {
@@ -29,6 +37,27 @@ export interface GlobalSettings {
   defaultUA: string;
   fetchTimeout: number;     // 秒
   filterEnabled: boolean;   // 全局过滤开关
+}
+
+export interface UpstreamRuntimeState {
+  upstreamId: string;
+  lastAttemptAt: string | null;
+  lastSuccessAt: string | null;
+  cacheUpdatedAt: string | null;
+  nodeCount: number;
+  lastError: string | null;
+  consecutiveFailures: number;
+  nextRetryAt: string | null;
+  sourceFingerprint: string;
+}
+
+export interface CachedUpstream {
+  schemaVersion: 1;
+  upstreamId: string;
+  sourceFingerprint: string;
+  updatedAt: string;
+  nodeCount: number;
+  content: string;
 }
 
 export interface ProxyNode {

@@ -1,5 +1,8 @@
 # Clash Sub Hub - 设计文档
 
+> [!WARNING]
+> 这是 2026-05-24 的历史设计快照，不再代表当前实现。用户 token、订阅输出、脚本、缓存和管理 API 已在 2026-07-29 的远端唯一事实源改造中重构；请以 [`README.md`](../../../README.md) 和 [`2026-07-29-remote-source-of-truth-checklist.md`](../../plans/2026-07-29-remote-source-of-truth-checklist.md) 为准。
+
 ## 概述
 
 基于 Cloudflare Workers + KV 的 Clash 订阅聚合分发服务。管理员添加上游机场订阅和自建节点，服务定时缓存上游内容，通过独立 token 链接分发给用户。用户拿到合并后的节点列表，无法看到原始订阅 URL。
