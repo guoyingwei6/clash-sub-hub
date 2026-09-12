@@ -4,43 +4,149 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Clash Sub Hub</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23315ee8'/%3E%3Cg transform='translate(5 5) scale(.9167)' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='16' y='16' width='6' height='6' rx='1'/%3E%3Crect x='2' y='16' width='6' height='6' rx='1'/%3E%3Crect x='9' y='2' width='6' height='6' rx='1'/%3E%3Cpath d='M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8'/%3E%3C/g%3E%3C/svg%3E">
 <link rel="stylesheet" href="/assets/admin.css">
 <script src="/assets/codemirror.js"></script>
 <style>
   :root {
-    --bg: #f6f8fb;
+    --bg: #f7f8fa;
     --panel: #ffffff;
-    --line: #d9e1ec;
-    --muted: #64748b;
-    --text: #0f172a;
-    --blue: #2563eb;
-    --blue-soft: #eff6ff;
-    --green: #059669;
-    --green-soft: #ecfdf5;
-    --amber: #d97706;
+    --line: #e4e7ec;
+    --muted: #687180;
+    --text: #242930;
+    --blue: #315ee8;
+    --blue-soft: #edf2ff;
+    --green: #168363;
+    --green-soft: #edf8f3;
+    --amber: #a96517;
     --amber-soft: #fffbeb;
     --red: #dc2626;
     --red-soft: #fef2f2;
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; letter-spacing: 0; }
+  html { scrollbar-gutter: stable; }
   body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background:
-      linear-gradient(180deg, rgba(37, 99, 235, 0.08), transparent 240px),
-      var(--bg);
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    background: var(--bg);
     color: var(--text);
+    -webkit-font-smoothing: antialiased;
   }
+  ::selection { color: #173b9e; background: #dce6ff; }
+  .icon { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+  .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
   button, input, textarea { transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease; }
   button:active { transform: translateY(1px); }
+  button:focus-visible, summary:focus-visible, label:has(input[type="file"]:focus-visible) {
+    outline: 2px solid var(--blue); outline-offset: 3px;
+  }
+  button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   input, textarea {
     border-color: var(--line) !important;
     background: #fff;
+    color: var(--text);
+    border-radius: 6px;
+    min-width: 0;
   }
+  input:not([type="checkbox"]):not([type="file"]) { min-height: 40px; font-size: 13px; }
+  input::placeholder, textarea::placeholder { color: #8a929e; font-weight: 400; }
+  textarea { line-height: 1.8; resize: vertical; }
+  input[type="checkbox"] { accent-color: var(--blue); }
+  label:has(> .sr-only:focus-visible) { outline: 2px solid var(--blue); outline-offset: 4px; }
+  input:hover, textarea:hover { border-color: #bdc5d1 !important; }
+  .font-mono { font-family: 'SFMono-Regular', Consolas, monospace; }
+  input:disabled, textarea:disabled { background: #f1f3f5; }
+  .hidden { display: none !important; }
+  .brand-mark {
+    width: 36px; height: 36px; flex: 0 0 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; color: #fff; background: var(--blue);
+    box-shadow: inset 0 0 0 1px #ffffff24;
+  }
+  .brand-mark .icon { width: 22px; height: 22px; flex-basis: 22px; }
+  .brand-copy h1 { font-size: 15px; font-weight: 650; line-height: 1.4; white-space: nowrap; }
+  .brand-copy p { font-size: 11px; font-weight: 400; margin-top: 3px; }
+  .sidebar .brand-copy p { color: #a0a7b3; }
+  .sidebar .brand-copy { min-width: 0; }
+  .sidebar .brand-copy h1 { color: #f3f4f6; }
+  .sidebar .brand-mark { background: #3b64ec; }
+  .sidebar-session { margin-top: 24px; padding-top: 16px; border-top: 1px solid #ffffff12; }
+  .sidebar-session .status-pill { padding: 0; border: 0; background: transparent; color: #9dd8ba; font-size: 11px; }
+  .sidebar-session button.btn-link { color: #aab1bc; }
+  .sidebar-session button.btn-link:hover { color: #fff; }
+  .sidebar-session .icon { width: 15px; height: 15px; flex-basis: 15px; }
+  .sidebar-session button { display: flex; align-items: center; gap: 6px; font-size: 11px; }
+  .sidebar nav { padding: 16px 12px; }
+  .sidebar nav > * + * { margin-top: 5px; }
+  .nav-count { min-width: 23px; padding: 1px 5px; border-radius: 4px; text-align: center; color: #a0a7b3; font-size: 10px; font-weight: 500; font-variant-numeric: tabular-nums; background: #ffffff08; }
+  .tab-active .nav-count { color: #e5ebff; background: #ffffff14; }
+  .tab-btn .icon { color: #919ba9; }
+  .tab-active .icon { color: #a9beff; }
+  .tab-btn > span:not(.nav-count) { white-space: nowrap; }
+  .main-pane > .topbar,
+  .main-pane > .metrics,
+  .main-pane > .tab-panel { max-width: 1320px; margin-left: auto; margin-right: auto; }
+  .topbar > div:first-child > p { color: #8a919d; font-size: 10px; font-weight: 500; }
+  #section-title { font-size: 25px; font-weight: 650; line-height: 1.4; margin-top: 5px; }
+  .topbar-actions .btn { background: #fff; }
+  .metrics { gap: 0; padding: 22px 0; margin-bottom: 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .metric-card + .metric-card { border-left: 1px solid var(--line); }
+  .metric-card > p { font-size: 12px; font-weight: 500; padding-right: 26px; }
+  .metric-card > .icon { position: absolute; right: 24px; top: 2px; color: #7888ac; }
+  .metric-card:nth-child(2) > .icon { color: var(--green); }
+  .metric-card:nth-child(3) > .icon { color: var(--amber); }
+  .metric-card:nth-child(4) > .icon { color: #777f8c; }
+  .tab-panel > .panel-pad { padding: 0 0 24px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+  .tab-panel .panel-title { margin-bottom: 0; }
+  .tab-panel .panel-title.mb-3 { margin-bottom: 14px; }
+  .tab-panel > .panel-pad > .flex { gap: 12px; flex-wrap: wrap; }
+  .tab-panel > .panel-pad > .flex > .flex { flex-wrap: wrap; }
+  .tab-panel .panel-pad > .flex > input { flex-basis: 160px; }
+  #tab-users .panel-pad > .flex:first-child > span { font-size: 11px; }
+  #tab-users .panel-pad > .flex:last-child { max-width: 680px; }
+  #new-up-name { flex: 0 1 160px; }
+  #new-up-url { flex: 1 1 260px; }
+  #new-node-yaml { min-height: 170px; height: 190px; background: #fff; padding: 14px 16px; }
+  #routing-yaml { border-radius: 6px; background: #fff; padding: 18px; line-height: 1.9; }
+  #tab-script section > .flex > .flex { flex-wrap: wrap; }
+  #tab-script details { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }
+  #tab-script summary { font-size: 12px; color: var(--muted); }
+  #tab-script details .panel { background: transparent; border: 0; border-radius: 0; }
+  #tab-script details .panel > .flex { flex-wrap: wrap; gap: 12px; }
+  #tab-script details .panel > .flex > .flex { flex-wrap: wrap; }
+  #global-settings-body { padding-top: 18px; border-top: 1px solid var(--line); }
+  #global-settings-body > .flex { gap: 16px; }
+  #global-settings-body label.relative { flex-shrink: 0; }
+  .table-wrap .status-error { max-width: 280px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
+  .table-wrap td { overflow-wrap: anywhere; }
+  .table-wrap td:last-child { white-space: nowrap; }
+  .table-wrap tbody td.flex { display: table-cell; }
+  .table-wrap tbody td.flex > button + button { margin-left: 12px; }
+  #users-table td:first-child { color: #727b89; font-size: 12px; }
+  #users-table td:nth-child(2) { font-weight: 550; }
+  #users-table td:last-child .btn { min-height: 30px; padding: 4px 10px; font-size: 12px; background: #fff; }
+  #upstreams-table td:nth-child(3), #nodes-table td:nth-child(4) { font-variant-numeric: tabular-nums; }
+  .modal-card > .flex:last-of-type { flex-wrap: wrap; gap: 12px; }
+  .modal-card > .flex:last-of-type > .flex { flex-wrap: wrap; }
+  .modal-card .panel-title { padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+  .modal-card hr { border-color: #edf0f3; margin: 18px 0; }
+  .modal-card .btn-warning { white-space: normal; }
+  #perm-upstreams, #perm-nodes { max-height: 240px; overflow-y: auto; overscroll-behavior: contain; }
+  #perm-upstreams > *, #perm-nodes > * { padding: 7px 8px; border-radius: 4px; }
+  #perm-upstreams > *:hover, #perm-nodes > *:hover { background: #f4f6f9; }
+  #login-page { min-height: 100svh; background: #f5f6f8; }
+  #login-page > .panel { border: 1px solid var(--line); box-shadow: 0 12px 40px #24293008; max-width: 380px; }
+  #login-page .brand-copy h1 { font-size: 18px; }
+  #login-page .brand-mark { width: 42px; height: 42px; flex-basis: 42px; }
+  #login-page input { min-height: 44px; }
+  #login-page .btn { min-height: 42px; }
   input:focus, textarea:focus {
     outline: none;
     border-color: #93c5fd !important;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    box-shadow: 0 0 0 3px rgba(49, 94, 232, 0.1);
   }
   .toast {
     position: fixed;
@@ -53,16 +159,19 @@
   }
   .app-shell {
     display: grid;
-    grid-template-columns: 248px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
     min-height: 100vh;
   }
   .sidebar {
-    background: rgba(255, 255, 255, 0.84);
-    border-right: 1px solid var(--line);
-    backdrop-filter: blur(16px);
+    background: #22252b;
+    color: #d6dae1;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
   }
   .sidebar-brand {
-    border-bottom: 1px solid var(--line);
+    padding: 28px 20px 20px;
   }
   .tab-btn {
     width: 100%;
@@ -70,45 +179,46 @@
     align-items: center;
     gap: 10px;
     border: 1px solid transparent;
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: #475569;
+    border-radius: 6px;
+    padding: 11px 12px;
+    color: #aeb6c2;
     font-size: 14px;
-    font-weight: 600;
+    font-weight: 500;
     text-align: left;
   }
   .tab-btn:hover {
-    background: #f8fafc;
-    color: var(--blue);
+    background: #ffffff08;
+    color: #fff;
   }
-  .tab-active {
-    background: var(--blue-soft);
-    border-color: #bfdbfe;
-    color: var(--blue);
-    box-shadow: inset 3px 0 0 var(--blue);
+  .tab-btn.tab-active, .tab-btn.tab-active:hover {
+    background: #343e57;
+    border-color: #ffffff08;
+    color: #f3f6ff;
+    box-shadow: none;
   }
   .main-pane {
     min-width: 0;
-    padding: 22px 26px 34px;
+    padding: 30px 36px 48px;
   }
   .topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 18px;
+    margin-bottom: 26px;
   }
   .panel {
     background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
   }
+  .tab-panel > .panel-pad { background: transparent; }
   .panel-pad { padding: 18px; }
   .panel-title {
-    font-size: 15px;
-    font-weight: 700;
-    color: #0f172a;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
   }
   .subtle { color: var(--muted); }
   .btn {
@@ -117,24 +227,25 @@
     justify-content: center;
     gap: 6px;
     border: 1px solid transparent;
-    border-radius: 7px;
-    padding: 8px 12px;
+    border-radius: 6px;
+    padding: 7px 12px;
     min-height: 36px;
     font-size: 13px;
-    font-weight: 650;
-    white-space: nowrap;
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: normal;
   }
-  .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 6px 14px rgba(37, 99, 235, 0.2); }
+  .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 1px 2px #15245c1a; }
   .btn-primary:hover { background: #1d4ed8; }
-  .btn-muted { background: #f8fafc; border-color: var(--line); color: #334155; }
-  .btn-muted:hover { background: #eef2f7; }
-  .btn-success { background: var(--green); color: #fff; box-shadow: 0 6px 14px rgba(5, 150, 105, 0.18); }
-  .btn-success:hover { background: #047857; }
-  .btn-warning { background: var(--amber); color: #fff; }
-  .btn-warning:hover { background: #b45309; }
+  .btn-muted { background: #fff; border-color: #dce0e6; color: #505966; }
+  .btn-muted:hover { background: #f0f2f5; border-color: #bcc4d0; }
+  .btn-success { background: var(--green-soft); color: var(--green); border-color: #cce7db; }
+  .btn-success:hover { background: #dff1e8; }
+  .btn-warning { background: #fff8ec; color: var(--amber); border-color: #f0dfc2; }
+  .btn-warning:hover { background: #f9eddb; }
   .btn-danger { background: var(--red-soft); border-color: #fecaca; color: var(--red); }
   .btn-danger:hover { background: #fee2e2; }
-  .btn-link { color: var(--blue); font-size: 13px; font-weight: 650; }
+  .btn-link { color: var(--blue); font-size: 12px; font-weight: 500; }
   .btn-link:hover { color: #1d4ed8; text-decoration: underline; }
   .btn-link.green { color: var(--green); }
   .btn-link.amber { color: var(--amber); }
@@ -143,69 +254,183 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    padding: 3px 9px;
-    font-size: 12px;
-    font-weight: 700;
+    border-radius: 4px;
+    border: 1px solid transparent;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 500;
     line-height: 1.4;
   }
-  .status-ok { background: var(--green-soft); border-color: #bbf7d0; color: var(--green); }
-  .status-warn { background: var(--amber-soft); border-color: #fde68a; color: var(--amber); }
-  .status-error { background: var(--red-soft); border-color: #fecaca; color: var(--red); }
-  .status-muted { background: #f8fafc; border-color: var(--line); color: var(--muted); }
+  .status-ok::before, .status-warn::before, .status-error::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: 0 0 5px; }
+  .status-ok { background: var(--green-soft); color: var(--green); }
+  .status-warn { background: var(--amber-soft); color: var(--amber); }
+  .status-error { background: var(--red-soft); color: var(--red); }
+  .status-muted { background: #eef0f3; color: var(--muted); }
   .metric-card {
-    min-height: 86px;
-    padding: 16px;
+    position: relative;
+    min-height: 72px;
+    padding: 0 24px;
+    background: transparent;
   }
   .metric-value {
-    font-size: 26px;
-    line-height: 1;
-    font-weight: 800;
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 550;
     letter-spacing: 0;
+    font-variant-numeric: tabular-nums;
   }
   .table-wrap {
     overflow-x: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+    scrollbar-width: thin;
   }
-  table { min-width: 760px; }
+  table { min-width: 680px; border-collapse: collapse; }
+  #tab-users table { min-width: 520px; }
   thead {
-    background: #f8fafc;
-    color: #475569;
+    background: #f1f3f6;
+    color: #707986;
     border-bottom: 1px solid var(--line);
   }
   th {
-    font-size: 12px;
-    font-weight: 750;
-    text-transform: uppercase;
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: none;
     letter-spacing: 0;
   }
   tbody tr {
-    border-top: 1px solid #eef2f7;
+    border-top: 1px solid #edf0f3;
   }
+  th, td { vertical-align: middle; }
+  tbody td { font-size: 13px; height: 58px; }
   tbody tr:hover {
-    background: #f8fbff;
+    background: #f7f9fd;
   }
   .modal-card {
     background: #fff;
     border: 1px solid var(--line);
     border-radius: 8px;
-    box-shadow: 0 24px 70px rgba(15, 23, 42, 0.28);
+    box-shadow: 0 24px 80px #181c2533;
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
   }
   .CodeMirror { height: 500px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px; }
   .cm-base .CodeMirror { height: 500px; }
-  @media (max-width: 900px) {
-    .app-shell { grid-template-columns: 1fr; }
-    .sidebar { position: sticky; top: 0; z-index: 20; border-right: 0; border-bottom: 1px solid var(--line); }
-    .sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-    .tab-btn { justify-content: center; padding: 9px 6px; font-size: 12px; }
+  @media (max-width: 1100px) {
+    .app-shell { grid-template-columns: 200px minmax(0, 1fr); }
+    .main-pane { padding: 26px 24px 40px; }
+    .sidebar-brand { padding: 24px 16px 16px; }
+    .brand-copy h1 { font-size: 13px; }
+    .brand-mark { width: 32px; height: 32px; flex-basis: 32px; }
+    .metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .metric-card { padding: 0 16px; }
+    .metric-card > .icon { display: none; }
+    .metric-card > p { padding-right: 0; }
+  }
+  @media (max-width: 860px) {
+    .app-shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+    .sidebar { position: relative; height: auto; overflow: visible; }
+    .sidebar-brand { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 10px; }
+    .sidebar-session { border: 0; margin: 0; padding: 0; gap: 16px; }
+    .sidebar nav { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 8px 12px 12px; }
+    .sidebar nav > * + * { margin-top: 0; }
+    .tab-btn { justify-content: center; padding: 10px 4px; gap: 6px; font-size: 12px; }
+    .tab-btn .icon { width: 16px; height: 16px; flex-basis: 16px; }
     .nav-count { display: none; }
-    .main-pane { padding: 16px; }
-    .topbar { align-items: flex-start; flex-direction: column; }
-    .topbar > div:last-child { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+    .main-pane { padding: 24px 20px 36px; }
+    .topbar { gap: 12px; margin-bottom: 20px; }
+    #section-title { font-size: 22px; }
+    .topbar-actions { flex-shrink: 0; }
+    .topbar-actions .btn { width: 36px; height: 36px; padding: 8px; }
+    .topbar-actions .btn > span { display: none; }
+    .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px 0; padding: 20px 0; margin-bottom: 24px; }
+    .metric-card { min-height: 62px; }
+    .metric-card:nth-child(3) { border-left: 0; }
+    .metric-value { font-size: 27px; margin-top: 8px; }
+    .metric-card > .icon { display: block; right: 20px; }
+    .metric-card > p { padding-right: 24px; }
+    .tab-panel > .panel-pad > .flex > .ml-auto { margin-left: 0; width: 100%; }
+    #new-up-name { flex: 1 1 100%; width: 100%; }
+    .modal-card { padding: 20px; }
+    .modal-card > .flex:last-of-type > .flex { margin-left: auto; }
+    #tab-script section > .flex { align-items: flex-start; }
+    #routing-yaml { font-size: 12px; min-height: 300px !important; }
+  }
+  @media (max-width: 540px) {
+    #tab-users .table-wrap { overflow: visible; }
+    #tab-users table { display: block; min-width: 0; }
+    #tab-users thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    #users-table { display: block; }
+    #users-table tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 16px; }
+    #users-table tr:first-child { border-top: 0; }
+    #users-table td { display: block; height: auto; padding: 0; }
+    #users-table td:nth-child(1) { grid-column: 1 / -1; grid-row: 2; }
+    #users-table td:nth-child(2) { grid-column: 1; grid-row: 1; }
+    #users-table td:nth-child(3) { grid-column: 2; grid-row: 1; }
+    #users-table td:nth-child(4) { display: block; grid-column: 1; grid-row: 3; align-self: center; }
+    #users-table td:nth-child(5) { grid-column: 2; grid-row: 3; }
+    #users-table td[colspan] { grid-column: 1 / -1; padding: 20px 0; }
+    #tab-users .panel-pad > .flex:first-child { align-items: flex-start; }
+    #tab-users .panel-pad > .flex:first-child > span { width: 100%; }
+    #new-user-name { flex-basis: 100%; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; scroll-behavior: auto !important; }
+    button:active { transform: none; }
   }
 </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+<!--
+Lucide icons - ISC License
+Copyright (c) 2026 Lucide Icons and Contributors
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+Feather-derived icons (log-out, plus, server) - MIT License
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" class="icon-defs" aria-hidden="true">
+  <defs>
+    <symbol id="icon-network" viewBox="0 0 24 24"><rect x="16" y="16" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="9" y="2" width="6" height="6" rx="1"/><path d="M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3M12 12V8"/></symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M16 3.128a4 4 0 0 1 0 7.744M22 21v-2a4 4 0 0 0-3-3.87"/><circle cx="9" cy="7" r="4"/></symbol>
+    <symbol id="icon-server" viewBox="0 0 24 24"><rect width="20" height="8" x="2" y="2" rx="2"/><rect width="20" height="8" x="2" y="14" rx="2"/><path d="M6 6h.01M6 18h.01"/></symbol>
+    <symbol id="icon-route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/><circle cx="18" cy="5" r="3"/></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8M21 3v5h-5M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16M8 16H3v5"/></symbol>
+    <symbol id="icon-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+    <symbol id="icon-logout" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5M21 12H9M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+  </defs>
+</svg>
 
 <!-- Toast -->
 <div id="toast" class="toast hidden bg-green-500 text-white px-4 py-2 rounded shadow-lg"></div>
@@ -346,8 +571,8 @@
   <div class="panel w-full max-w-sm overflow-hidden">
     <div class="px-7 pt-7 pb-5 border-b border-slate-200">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black">C</div>
-        <div>
+        <div class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-network"/></svg></div>
+        <div class="brand-copy">
           <h1 class="text-lg font-extrabold">Clash Sub Hub</h1>
           <p class="text-xs subtle mt-1">订阅聚合与配置管理</p>
         </div>
@@ -367,22 +592,22 @@
   <aside class="sidebar">
     <div class="sidebar-brand p-5">
       <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black">C</div>
-        <div class="min-w-0">
+        <div class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-network"/></svg></div>
+        <div class="brand-copy min-w-0">
           <h1 class="font-extrabold leading-tight">Clash Sub Hub</h1>
           <p class="text-xs subtle mt-1">Cloudflare Worker</p>
         </div>
       </div>
-      <div class="mt-4 flex items-center justify-between text-xs">
+      <div class="sidebar-session flex items-center justify-between text-xs">
         <span class="status-pill status-ok">在线</span>
-        <button onclick="logout()" class="btn-link red">退出</button>
+        <button onclick="logout()" class="btn-link red"><svg class="icon" aria-hidden="true"><use href="#icon-logout"/></svg>退出</button>
       </div>
     </div>
-    <nav class="p-3 space-y-1">
-      <button class="tab-btn tab-active" data-tab="users"><span>用户</span><span class="nav-count ml-auto text-xs subtle" id="nav-users-count">0</span></button>
-      <button class="tab-btn" data-tab="upstreams"><span>上游</span><span class="nav-count ml-auto text-xs subtle" id="nav-upstreams-count">0</span></button>
-      <button class="tab-btn" data-tab="nodes"><span>自建</span><span class="nav-count ml-auto text-xs subtle" id="nav-nodes-count">0</span></button>
-      <button class="tab-btn" data-tab="script"><span>脚本</span><span class="nav-count ml-auto text-xs subtle">JS</span></button>
+    <nav class="p-3 space-y-1" aria-label="管理导航">
+      <button class="tab-btn tab-active" data-tab="users"><svg class="icon" aria-hidden="true"><use href="#icon-users"/></svg><span>用户</span><span class="nav-count ml-auto" id="nav-users-count">0</span></button>
+      <button class="tab-btn" data-tab="upstreams"><svg class="icon" aria-hidden="true"><use href="#icon-network"/></svg><span>上游</span><span class="nav-count ml-auto" id="nav-upstreams-count">0</span></button>
+      <button class="tab-btn" data-tab="nodes"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>自建</span><span class="nav-count ml-auto" id="nav-nodes-count">0</span></button>
+      <button class="tab-btn" data-tab="script"><svg class="icon" aria-hidden="true"><use href="#icon-route"/></svg><span>脚本</span><span class="nav-count ml-auto">JS</span></button>
     </nav>
   </aside>
 
@@ -392,26 +617,30 @@
         <p class="text-xs font-bold subtle uppercase tracking-normal">Admin Console</p>
         <h2 id="section-title" class="text-2xl font-extrabold mt-1">用户管理</h2>
       </div>
-      <div class="flex items-center gap-2">
-        <button onclick="refreshAllData()" class="btn btn-muted">刷新数据</button>
-        <button onclick="copyScriptUrl()" class="btn btn-muted">复制脚本</button>
+      <div class="topbar-actions flex items-center gap-2">
+        <button onclick="refreshAllData()" class="btn btn-muted" title="刷新数据" aria-label="刷新数据"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg><span>刷新数据</span></button>
+        <button onclick="copyScriptUrl()" class="btn btn-muted" title="复制脚本" aria-label="复制脚本"><svg class="icon" aria-hidden="true"><use href="#icon-copy"/></svg><span>复制脚本</span></button>
       </div>
     </div>
 
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+    <div class="metrics grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
       <div class="panel metric-card">
+        <svg class="icon" aria-hidden="true"><use href="#icon-users"/></svg>
         <p class="text-xs font-bold subtle">用户</p>
         <div id="stat-users" class="metric-value mt-3">0</div>
       </div>
       <div class="panel metric-card">
+        <svg class="icon" aria-hidden="true"><use href="#icon-network"/></svg>
         <p class="text-xs font-bold subtle">上游订阅</p>
         <div id="stat-upstreams" class="metric-value mt-3">0</div>
       </div>
       <div class="panel metric-card">
+        <svg class="icon" aria-hidden="true"><use href="#icon-route"/></svg>
         <p class="text-xs font-bold subtle">缓存节点</p>
         <div id="stat-upstream-nodes" class="metric-value mt-3">0</div>
       </div>
       <div class="panel metric-card">
+        <svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg>
         <p class="text-xs font-bold subtle">自建节点</p>
         <div id="stat-nodes" class="metric-value mt-3">0</div>
       </div>
@@ -426,7 +655,7 @@
       </div>
       <div class="flex gap-2 flex-wrap">
         <input id="new-user-name" placeholder="备注名（token 由服务端随机生成）" class="flex-1 px-3 py-2 border rounded text-sm">
-        <button onclick="addUser()" class="btn btn-primary">添加用户</button>
+        <button onclick="addUser()" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加用户</button>
       </div>
     </div>
     <div class="panel table-wrap">
