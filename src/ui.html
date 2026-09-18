@@ -607,7 +607,7 @@ SOFTWARE.
       <button class="tab-btn tab-active" data-tab="users"><svg class="icon" aria-hidden="true"><use href="#icon-users"/></svg><span>用户</span><span class="nav-count ml-auto" id="nav-users-count">0</span></button>
       <button class="tab-btn" data-tab="upstreams"><svg class="icon" aria-hidden="true"><use href="#icon-network"/></svg><span>上游</span><span class="nav-count ml-auto" id="nav-upstreams-count">0</span></button>
       <button class="tab-btn" data-tab="nodes"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>自建</span><span class="nav-count ml-auto" id="nav-nodes-count">0</span></button>
-      <button class="tab-btn" data-tab="script"><svg class="icon" aria-hidden="true"><use href="#icon-route"/></svg><span>脚本</span><span class="nav-count ml-auto">JS</span></button>
+      <button class="tab-btn" data-tab="script"><svg class="icon" aria-hidden="true"><use href="#icon-route"/></svg><span>规则 / DNS</span><span class="nav-count ml-auto">YAML</span></button>
     </nav>
   </aside>
 
@@ -778,6 +778,21 @@ uuid: xxx
 
   <!-- ==================== 扩展脚本 Tab ==================== -->
   <div id="tab-script" class="tab-panel hidden">
+    <section class="mb-4">
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <h3 class="panel-title">分流策略</h3>
+        <div class="flex gap-2">
+          <label class="btn btn-muted cursor-pointer">导入 YAML<input type="file" accept=".yaml,.yml" class="hidden" onchange="importRoutingFile(this)"></label>
+          <button onclick="exportRouting()" class="btn btn-muted">导出</button>
+          <button onclick="loadRouting()" class="btn btn-muted">重新加载</button>
+          <button id="save-routing" onclick="saveRouting()" class="btn btn-primary">保存策略</button>
+        </div>
+      </div>
+      <textarea id="routing-yaml" aria-label="规则与 DNS 策略 YAML" rows="24" spellcheck="false" class="w-full font-mono text-sm border p-3" style="resize:vertical;min-height:320px;box-sizing:border-box"></textarea>
+      <div id="routing-status" role="status" class="text-sm mt-2"></div>
+    </section>
+    <details>
+      <summary class="mb-3 cursor-pointer">旧版脚本</summary>
     <!-- 基础脚本 (来自外部链接) -->
     <div class="panel panel-pad mb-4">
       <div class="flex items-center justify-between mb-3">
@@ -812,6 +827,7 @@ uuid: xxx
         <div id="script-editor-wrap"></div>
       </div>
     </div>
+    </details>
   </div>
   </main>
 </div>
@@ -921,7 +937,7 @@ const TAB_TITLES = {
   users: '用户管理',
   upstreams: '上游订阅',
   nodes: '自建节点',
-  script: '扩展脚本',
+  script: '规则 / DNS',
 };
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -933,11 +949,51 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     setText('section-title', TAB_TITLES[btn.dataset.tab] || '管理后台');
     localStorage.setItem('active_tab', btn.dataset.tab);
     if (btn.dataset.tab === 'script') {
+      if (!_routingLoaded) loadRouting();
       if (_cmOverride) setTimeout(() => _cmOverride.refresh(), 0);
       if (_cmBase) setTimeout(() => _cmBase.refresh(), 0);
     }
   });
 });
+
+let _routingRevision = '';
+let _routingLoaded = false;
+async function loadRouting() {
+  const {ok, data} = await api('/api/routing');
+  if (!ok) return toast(data?.error || '策略读取失败', false);
+  _routingRevision = data.revision;
+  _routingLoaded = true;
+  document.getElementById('routing-yaml').value = data.yaml || '';
+  setText('routing-status', data.yaml ? '已加载' : '尚未设置独立策略');
+}
+async function saveRouting() {
+  if (!_routingRevision) return toast('请先重新加载当前策略', false);
+  const button = document.getElementById('save-routing');
+  button.disabled = true;
+  try {
+    const {ok, data} = await api('/api/routing', {method:'PUT', body:{
+      yaml: document.getElementById('routing-yaml').value,
+      expectedRevision: _routingRevision,
+    }});
+    if (!ok) {
+      setText('routing-status', data?.error || '保存失败');
+      return toast(data?.error || '保存失败', false);
+    }
+    _routingRevision = data.revision;
+    setText('routing-status', '已保存');
+    toast('策略已发布');
+  } finally { button.disabled = false; }
+}
+async function importRoutingFile(input) {
+  if (!input.files[0]) return;
+  if (!_routingLoaded) await loadRouting();
+  document.getElementById('routing-yaml').value = await input.files[0].text();
+  setText('routing-status', '未保存');
+  input.value = '';
+}
+function exportRouting() {
+  download('routing-dns.yaml', document.getElementById('routing-yaml').value, 'text/yaml');
+}
 
 // ==================== Users ====================
 let _usersData = [];

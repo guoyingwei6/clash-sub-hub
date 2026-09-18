@@ -18,6 +18,7 @@ import { getUpstreamCache } from './storage/upstream-cache';
 import { cacheAgeSeconds } from './domain/cache-policy';
 import { hashSubscriptionToken } from './domain/token';
 import { isReservedProxyName } from './domain/reserved-names';
+import { validateRoutingProfile, validateRoutingReferences } from './domain/routing-profile';
 import {
   DesiredConfigDraft,
   DesiredConfigV2,
@@ -114,7 +115,8 @@ export async function handleSubscription(
       env,
       config.policy,
       data.customNodes.map((node) => node.name),
-      true
+      true,
+      data.inlineProviders
     );
     if (fullConfig instanceof Response) return fullConfig;
     if (canUseDefaultArtifact) {
@@ -176,12 +178,14 @@ interface ProviderInfo {
   userAgent: string;
   prefix: string;
   exclude?: string;
+  options?: Record<string, unknown>;
 }
 
 type SubscriptionData = {
   customNodes: ProxyNode[];
   providers: ProviderInfo[];
   materializedNodes: ProxyNode[];
+  inlineProviders: Record<string, unknown>;
 };
 
 class MaterializationError extends Error {
@@ -235,6 +239,7 @@ async function collectSubscriptionData(
 
   const providers: ProviderInfo[] = [];
   const cachedNodes: ProxyNode[] = [];
+  const inlineProviders: Record<string, unknown> = {};
 
   for (const upstream of upstreams) {
     if (upstream.fetchMode === 'disabled') continue;
@@ -245,6 +250,7 @@ async function collectSubscriptionData(
       userAgent: upstream.userAgent || settings.defaultUA,
       prefix,
       exclude: upstream.exclude,
+      options: upstream.providerOptions,
     };
     providers.push(provider);
 
@@ -266,6 +272,18 @@ async function collectSubscriptionData(
 
     let nodes = parseClashYaml(cache.content);
     if (shouldFilter) nodes = filterNodes(nodes);
+    const inline: Record<string, unknown> = {
+      ...structuredClone(upstream.providerOptions),
+      type: 'inline',
+      payload: nodes.map(omitUnsetOptions),
+      override: {
+        ...(upstream.providerOptions.override as Record<string, unknown> ?? {}),
+        'additional-prefix': prefix,
+      },
+    };
+    for (const key of ['url', 'path', 'header', 'proxy', 'interval', 'size-limit']) delete inline[key];
+    if (provider.exclude) inline['exclude-filter'] = provider.exclude;
+    inlineProviders[provider.name] = inline;
     nodes = applyProviderExclude(nodes, provider.exclude);
     cachedNodes.push(...nodes.map((node) => applyProviderPrefix(node, prefix)));
   }
@@ -291,6 +309,7 @@ async function collectSubscriptionData(
     customNodes,
     providers,
     materializedNodes,
+    inlineProviders,
   };
 }
 
@@ -315,7 +334,8 @@ export async function buildDefaultMaterializedArtifact(
     env,
     config.policy,
     data.customNodes.map((node) => node.name),
-    true
+    true,
+    data.inlineProviders
   );
   const bytes = new TextEncoder().encode(yaml).byteLength;
   if (bytes > MAX_MATERIALIZED_ARTIFACT_BYTES) {
@@ -409,6 +429,18 @@ function applyProviderPrefix(node: ProxyNode, prefix: string): ProxyNode {
   return { ...node, name: `${prefix}${node.name}` };
 }
 
+// Inline providers use Mihomo's typed decoder, which rejects null optional
+// fields accepted by its external-provider YAML parser. Keep all set values.
+function omitUnsetOptions(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(omitUnsetOptions);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value)
+      .filter(([, v]) => v !== null && v !== undefined)
+      .map(([key, v]) => [key, omitUnsetOptions(v)]));
+  }
+  return value;
+}
+
 function buildMergeConfig(customNodes: ProxyNode[], providers: ProviderInfo[]): string {
   const proxyProviders: Record<string, unknown> = {};
   for (const p of providers) {
@@ -441,7 +473,8 @@ async function safeBuildFullConfig(
   env: Env,
   policy: MaterializedPolicy,
   customNodeNames: string[],
-  materialized: boolean
+  materialized: boolean,
+  inlineProviders: Record<string, unknown> = {}
 ): Promise<string | Response> {
   try {
     return await buildFullConfig(
@@ -450,7 +483,8 @@ async function safeBuildFullConfig(
       env,
       policy,
       customNodeNames,
-      materialized
+      materialized,
+      inlineProviders
     );
   } catch {
     console.error('完整配置生成失败');
@@ -467,14 +501,13 @@ async function buildFullConfig(
   env: Env,
   policy: MaterializedPolicy,
   customNodeNames: string[],
-  materialized: boolean
+  materialized: boolean,
+  inlineProviders: Record<string, unknown> = {}
 ): Promise<string> {
   void env;
   const proxyProviders: Record<string, unknown> = {};
   for (const p of providers) {
     const provider: Record<string, unknown> = {
-      type: 'http',
-      url: p.url,
       interval: 3600,
       path: `./providers/${p.name}.yaml`,
       'health-check': {
@@ -483,14 +516,33 @@ async function buildFullConfig(
         interval: 300,
       },
       header: { 'User-Agent': [p.userAgent] },
+      ...structuredClone(p.options ?? {}),
+      type: 'http',
+      url: p.url,
     };
     if (p.prefix) {
-      provider.override = { 'additional-prefix': p.prefix };
+      provider.override = {
+        ...(provider.override as Record<string, unknown> ?? {}),
+        'additional-prefix': p.prefix,
+      };
     }
     if (p.exclude) {
       provider['exclude-filter'] = p.exclude;
     }
     proxyProviders[p.name] = provider;
+  }
+
+  if (policy.routingProfile) {
+    const routing = validateRoutingProfile(policy.routingProfile);
+    const custom = new Set(customNodeNames);
+    const routingNodes = materialized ? proxies.filter(n => custom.has(n.name)) : proxies;
+    const routingProviders = materialized ? inlineProviders : proxyProviders;
+    validateRoutingReferences(routing, routingProviders, routingNodes);
+    return stringifyYaml({
+      ...routing,
+      proxies: routingNodes,
+      'proxy-providers': routingProviders,
+    });
   }
 
   let config: Record<string, unknown> = {

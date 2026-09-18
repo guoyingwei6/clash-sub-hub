@@ -26,6 +26,7 @@ import {
   getScriptUrl, setScriptUrl, syncScriptFromUrl,
   importMerge, exportMerge,
   getSettings, updateSettings,
+  getRouting, updateRouting,
 } from './admin';
 import { handleStagingProvider } from './staging-fixture';
 import UI_HTML from './ui.html';
@@ -158,6 +159,8 @@ async function routeApi(
   request: Request,
   env: Env
 ): Promise<Response> {
+  if (path === '/api/routing' && method === 'GET') return getRouting(env);
+  if (path === '/api/routing' && method === 'PUT') return updateRouting(request, env);
   // 用户
   if (path === '/api/users' && method === 'GET') return listUsers(env);
   if (path === '/api/users' && method === 'POST') return createUser(request, env);

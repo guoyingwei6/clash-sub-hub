@@ -6,3 +6,4 @@ coverage/
 .agent-workbench/
 .dev.vars
 src/generated/
+migration-hako/

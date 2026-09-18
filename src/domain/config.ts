@@ -1,4 +1,5 @@
 import { ProxyNode } from '../types';
+import { RoutingProfile } from './routing-profile';
 
 export const DESIRED_CONFIG_SCHEMA_VERSION = 2 as const;
 
@@ -17,6 +18,7 @@ export interface UpstreamDefinition {
 }
 
 export interface MaterializedPolicy {
+  routingProfile?: RoutingProfile;
   filterUpstreamInfoNodes: boolean;
   missingCache: 'fail' | 'serve-stale';
   maxCacheAgeSeconds: number;

@@ -1,0 +1,18 @@
+[    1294ms] [ERROR] Loading the script 'https://static.cloudflareinsights.com/beacon.min.js/v31edd6df95cf4e85bb4c19e7a9bdbcba1788362987495' violates the following Content Security Policy directive: "script-src 'self' 'unsafe-inline'". Note that 'script-src-elem' was not explicitly set, so 'script-src' is used as a fallback. The action has been blocked. @ https://clash.guoyingwei.top/admin:0
+[    1309ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ https://clash.guoyingwei.top/admin:0
+[    1488ms] [ERROR] Failed to load resource: the server responded with a status of 401 () @ https://clash.guoyingwei.top/api/admin/session:0
+[    1489ms] [ERROR] Failed to load resource: the server responded with a status of 404 () @ https://clash.guoyingwei.top/favicon.ico:0
+[    6699ms] TypeError: Cannot set properties of null (setting 'value')
+    at loadScriptUrl (https://clash.guoyingwei.top/admin:1407:47)
+[  143341ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8789/admin:0
+[  143347ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://127.0.0.1:8789/api/admin/session:0
+[  143361ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://127.0.0.1:8789/favicon.ico:0
+[  273963ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8789/admin:0
+[  274304ms] TypeError: Cannot set properties of null (setting 'value')
+    at loadScriptUrl (http://127.0.0.1:8789/admin:1581:47)
+[  590078ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8789/admin:0
+[  590138ms] TypeError: Cannot set properties of null (setting 'value')
+    at loadScriptUrl (http://127.0.0.1:8789/admin:1599:47)
+[ 1019111ms] [VERBOSE] [DOM] Password field is not contained in a form: (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:8789/admin:0
+[ 1019222ms] TypeError: Cannot set properties of null (setting 'value')
+    at loadScriptUrl (http://127.0.0.1:8789/admin:1635:47)

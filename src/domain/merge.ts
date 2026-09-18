@@ -9,6 +9,7 @@ import {
   UpstreamFetchMode,
 } from './config';
 import { isReservedProxyName } from './reserved-names';
+import { validateRoutingProfile } from './routing-profile';
 
 type NamedEntity = { name: string };
 
@@ -125,6 +126,7 @@ export function serializeMergeConfig(config: DesiredConfigDraft): string {
       'filter-upstream-info-nodes': config.policy.filterUpstreamInfoNodes,
       'missing-cache': config.policy.missingCache,
       'max-cache-age-seconds': config.policy.maxCacheAgeSeconds,
+      ...(config.policy.routingProfile ? { 'routing-profile': config.policy.routingProfile } : {}),
       ...(config.policy.domesticNameservers
         ? { 'domestic-nameservers': config.policy.domesticNameservers }
         : {}),
@@ -292,6 +294,9 @@ function parsePolicy(
     filterUpstreamInfoNodes,
     missingCache,
     maxCacheAgeSeconds,
+    ...(rawPolicy['routing-profile'] !== undefined
+      ? { routingProfile: validateRoutingProfile(rawPolicy['routing-profile']) }
+      : fallback.routingProfile ? { routingProfile: structuredClone(fallback.routingProfile) } : {}),
     ...(domesticNameservers ? { domesticNameservers } : {}),
     ...(foreignNameservers ? { foreignNameservers } : {}),
     ...(tunRouteExcludeAddresses ? { tunRouteExcludeAddresses } : {}),

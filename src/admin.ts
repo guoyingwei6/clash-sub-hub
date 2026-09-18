@@ -3,7 +3,8 @@ import { testUpstreamUrl, handleScheduled, fetchUpstream } from './cron';
 import { getGlobalSettings } from './settings';
 import { parseClashYaml, filterNodes, isProxyNode } from './converter';
 import { connect } from 'cloudflare:sockets';
-import { parseYaml } from './yaml';
+import { parseYaml, stringifyYaml } from './yaml';
+import { parseRoutingYaml, RoutingValidationError } from './domain/routing-profile';
 import {
   DesiredConfigDraft,
   MaterializedArtifact,
@@ -107,6 +108,9 @@ function adminPrefix(value: string | undefined, name: string): string {
 }
 
 function mutationError(error: unknown): Response {
+  if (error instanceof RoutingValidationError) {
+    return Response.json({ error: error.message }, { status: 400 });
+  }
   if (error instanceof ConfigConflictError) {
     return Response.json(
       { error: error.message, currentRevision: error.currentRevision },
@@ -594,6 +598,48 @@ export async function testExistingNode(name: string, env: Env): Promise<Response
 }
 
 // ==================== 脚本管理 ====================
+
+export async function getRouting(env: Env): Promise<Response> {
+  const config = await loadActiveDesiredConfig(env.KV);
+  return Response.json({
+    revision: config.revision,
+    yaml: config.policy.routingProfile ? stringifyYaml(config.policy.routingProfile) : '',
+  }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
+export async function updateRouting(request: Request, env: Env): Promise<Response> {
+  if (requestTooLarge(request, MAX_MERGE_BYTES)) {
+    return Response.json({ error: '策略请求过大' }, { status: 413 });
+  }
+  const text = await request.text();
+  if (utf8ByteLength(text) > MAX_MERGE_BYTES) {
+    return Response.json({ error: '策略请求过大' }, { status: 413 });
+  }
+  let body: { yaml?: unknown; expectedRevision?: unknown };
+  try { body = JSON.parse(text); } catch {
+    return Response.json({ error: '请求必须是 JSON' }, { status: 400 });
+  }
+  if (!body || typeof body.yaml !== 'string' || typeof body.expectedRevision !== 'string') {
+    return Response.json({ error: '缺少 yaml 或 expectedRevision' }, { status: 400 });
+  }
+  try {
+    const current = await loadActiveDesiredConfig(env.KV);
+    if (current.revision !== body.expectedRevision) throw new ConfigConflictError(current.revision);
+    const draft = structuredClone(toDraft(current));
+    draft.policy.routingProfile = parseRoutingYaml(body.yaml);
+    const artifact = await buildDefaultMaterializedArtifact(draft, env);
+    const result = await publishDesiredConfig(env.KV, draft, {
+      expectedRevision: current.revision,
+      materializedArtifact: artifact,
+    });
+    return Response.json({ ok: true, revision: result.config.revision });
+  } catch (error) {
+    if (error instanceof RoutingValidationError || error instanceof ConfigConflictError) {
+      return mutationError(error);
+    }
+    return Response.json({ error: '策略生成验证失败，未发布；请检查节点缓存和引用' }, { status: 400 });
+  }
+}
 
 export async function getScript(env: Env): Promise<Response> {
   void env;
