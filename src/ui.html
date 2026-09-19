@@ -9,6 +9,7 @@
 <script src="/assets/codemirror.js"></script>
 <style>
   :root {
+    color-scheme: light;
     --bg: #f7f8fa;
     --panel: #ffffff;
     --line: #e4e7ec;
@@ -22,6 +23,83 @@
     --amber-soft: #fffbeb;
     --red: #dc2626;
     --red-soft: #fef2f2;
+    --input-bg: #ffffff;
+    --input-text: var(--text);
+    --input-placeholder: #8a929e;
+    --input-hover-border: #bdc5d1;
+    --sidebar-bg: #1f2329;
+    --sidebar-text: #f3f4f6;
+    --sidebar-muted: #a0a7b3;
+    --cm-bg: #ffffff;
+    --cm-text: #24292f;
+    --cm-gutter-bg: #f6f8fa;
+    --cm-gutter-border: #d0d7de;
+    --cm-linenumber: #57606a;
+    --cm-cursor: #24292f;
+    --cm-selected: #ddf4ff;
+    --cm-border: #d0d7de;
+    --btn-muted-bg: #ffffff;
+    --btn-muted-text: #505966;
+    --btn-muted-border: #dce0e6;
+    --btn-muted-hover-bg: #f0f2f5;
+    --btn-muted-hover-border: #bcc4d0;
+    --table-bg: #ffffff;
+    --thead-bg: #f1f3f6;
+    --thead-text: #707986;
+    --row-border: #edf0f3;
+    --row-hover: #f7f9fd;
+    --modal-bg: #ffffff;
+    --tab-btn-text: #aeb6c2;
+    --tab-btn-hover-bg: #ffffff08;
+    --tab-btn-hover-text: #ffffff;
+    --tab-active-bg: #343e57;
+  }
+
+  html[data-theme="dark"] {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --line: #30363d;
+    --muted: #8b949e;
+    --text: #e6edf3;
+    --blue: #4493f8;
+    --blue-soft: #1f2c3f;
+    --green: #3fb950;
+    --green-soft: #12261e;
+    --amber: #d29922;
+    --amber-soft: #2a2013;
+    --red: #f85149;
+    --red-soft: #2d1618;
+    --input-bg: #0d1117;
+    --input-text: #e6edf3;
+    --input-placeholder: #6e7681;
+    --input-hover-border: #444c56;
+    --sidebar-bg: #010409;
+    --sidebar-text: #f0f6fc;
+    --sidebar-muted: #848d97;
+    --cm-bg: #0d1117;
+    --cm-text: #e6edf3;
+    --cm-gutter-bg: #0d1117;
+    --cm-gutter-border: #30363d;
+    --cm-linenumber: #6e7681;
+    --cm-cursor: #e6edf3;
+    --cm-selected: #1f3a5f;
+    --cm-border: #30363d;
+    --btn-muted-bg: #21262d;
+    --btn-muted-text: #c9d1d9;
+    --btn-muted-border: #373e47;
+    --btn-muted-hover-bg: #2d333b;
+    --btn-muted-hover-border: #444c56;
+    --table-bg: #161b22;
+    --thead-bg: #1c2128;
+    --thead-text: #8b949e;
+    --row-border: #21262d;
+    --row-hover: #1f2429;
+    --modal-bg: #161b22;
+    --tab-btn-text: #848d97;
+    --tab-btn-hover-bg: #ffffff10;
+    --tab-btn-hover-text: #f0f6fc;
+    --tab-active-bg: #1f2c3f;
+    color-scheme: dark;
   }
 
   * { box-sizing: border-box; letter-spacing: 0; }
@@ -35,7 +113,7 @@
     color: var(--text);
     -webkit-font-smoothing: antialiased;
   }
-  ::selection { color: #173b9e; background: #dce6ff; }
+  ::selection { color: var(--blue); background: var(--blue-soft); }
   .icon { width: 18px; height: 18px; flex: 0 0 18px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
   .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
   button, input, textarea { transition: border-color 0.16s ease, background-color 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, transform 0.16s ease; }
@@ -46,19 +124,19 @@
   button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
   input, textarea {
     border-color: var(--line) !important;
-    background: #fff;
+    background: var(--input-bg);
     color: var(--text);
     border-radius: 6px;
     min-width: 0;
   }
   input:not([type="checkbox"]):not([type="file"]) { min-height: 40px; font-size: 13px; }
-  input::placeholder, textarea::placeholder { color: #8a929e; font-weight: 400; }
+  input::placeholder, textarea::placeholder { color: var(--input-placeholder); font-weight: 400; }
   textarea { line-height: 1.8; resize: vertical; }
   input[type="checkbox"] { accent-color: var(--blue); }
   label:has(> .sr-only:focus-visible) { outline: 2px solid var(--blue); outline-offset: 4px; }
-  input:hover, textarea:hover { border-color: #bdc5d1 !important; }
+  input:hover, textarea:hover { border-color: var(--input-hover-border) !important; }
   .font-mono { font-family: 'SFMono-Regular', Consolas, monospace; }
-  input:disabled, textarea:disabled { background: #f1f3f5; }
+  input:disabled, textarea:disabled { background: var(--bg); }
   .hidden { display: none !important; }
   .brand-mark {
     width: 36px; height: 36px; flex: 0 0 36px;
@@ -91,7 +169,7 @@
   .main-pane > .tab-panel { max-width: 1320px; margin-left: auto; margin-right: auto; }
   .topbar > div:first-child > p { color: #8a919d; font-size: 10px; font-weight: 500; }
   #section-title { font-size: 25px; font-weight: 650; line-height: 1.4; margin-top: 5px; }
-  .topbar-actions .btn { background: #fff; }
+  .topbar-actions .btn { background: var(--input-bg); }
   .metrics { gap: 0; padding: 22px 0; margin-bottom: 28px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
   .metric-card + .metric-card { border-left: 1px solid var(--line); }
   .metric-card > p { font-size: 12px; font-weight: 500; padding-right: 26px; }
@@ -109,16 +187,17 @@
   #tab-users .panel-pad > .flex:last-child { max-width: 680px; }
   #new-up-name { flex: 0 1 160px; }
   #new-up-url { flex: 1 1 260px; }
-  #new-node-yaml { min-height: 170px; height: 190px; background: #fff; padding: 14px 16px; }
-  #routing-yaml { border-radius: 6px; background: #fff; padding: 18px; line-height: 1.9; }
+  #new-node-yaml { min-height: 170px; height: 190px; background: var(--input-bg); padding: 14px 16px; }
+  #routing-yaml { border-radius: 6px; background: var(--input-bg); padding: 18px; line-height: 1.9; }
 
   /* GitHub-style code editor for the routing YAML pane */
   #routing-editor .CodeMirror {
     height: auto;
     min-height: 420px;
-    border: 1px solid #d0d7de;
+    border: 1px solid var(--cm-border);
     border-radius: 6px;
-    background: #ffffff;
+    background: var(--cm-bg);
+    color: var(--cm-text);
     font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
     line-height: 1.45;
@@ -131,18 +210,18 @@
     padding: 0 8px;
   }
   #routing-editor .CodeMirror-gutters {
-    background: #f6f8fa;
-    border-right: 1px solid #d0d7de;
+    background: var(--cm-gutter-bg);
+    border-right: 1px solid var(--cm-gutter-border);
   }
   #routing-editor .CodeMirror-linenumber {
-    color: #57606a;
+    color: var(--cm-linenumber);
     font-size: 12px;
     padding: 0 8px 0 12px;
     min-width: 28px;
   }
-  #routing-editor .CodeMirror-cursor { border-left: 1px solid #24292f; }
+  #routing-editor .CodeMirror-cursor { border-left: 1px solid var(--cm-cursor); }
   #routing-editor .CodeMirror-selected,
-  #routing-editor .CodeMirror-focused .CodeMirror-selected { background: #ddf4ff; }
+  #routing-editor .CodeMirror-focused .CodeMirror-selected { background: var(--cm-selected); }
   /* GitHub-ish YAML token colours */
   #routing-editor .cm-atom, #routing-editor .cm-def { color: #0550ae; }
   #routing-editor .cm-string, #routing-editor .cm-string-2 { color: #0a3069; }
@@ -165,7 +244,7 @@
   .table-wrap tbody td.flex > button + button { margin-left: 12px; }
   #users-table td:first-child { color: #727b89; font-size: 12px; }
   #users-table td:nth-child(2) { font-weight: 550; }
-  #users-table td:last-child .btn { min-height: 30px; padding: 4px 10px; font-size: 12px; background: #fff; }
+  #users-table td:last-child .btn { min-height: 30px; padding: 4px 10px; font-size: 12px; background: var(--btn-muted-bg); }
   #upstreams-table td:nth-child(3), #nodes-table td:nth-child(4) { font-variant-numeric: tabular-nums; }
   .modal-card > .flex:last-of-type { flex-wrap: wrap; gap: 12px; }
   .modal-card > .flex:last-of-type > .flex { flex-wrap: wrap; }
@@ -201,8 +280,8 @@
     min-height: 100vh;
   }
   .sidebar {
-    background: #22252b;
-    color: #d6dae1;
+    background: var(--sidebar-bg);
+    color: var(--sidebar-text);
     position: sticky;
     top: 0;
     height: 100vh;
@@ -219,17 +298,17 @@
     border: 1px solid transparent;
     border-radius: 6px;
     padding: 11px 12px;
-    color: #aeb6c2;
+    color: var(--tab-btn-text);
     font-size: 14px;
     font-weight: 500;
     text-align: left;
   }
   .tab-btn:hover {
-    background: #ffffff08;
-    color: #fff;
+    background: var(--tab-btn-hover-bg);
+    color: var(--tab-btn-hover-text);
   }
   .tab-btn.tab-active, .tab-btn.tab-active:hover {
-    background: #343e57;
+    background: var(--tab-active-bg);
     border-color: #ffffff08;
     color: #f3f6ff;
     box-shadow: none;
@@ -275,8 +354,37 @@
   }
   .btn-primary { background: var(--blue); color: #fff; box-shadow: 0 1px 2px #15245c1a; }
   .btn-primary:hover { background: #1d4ed8; }
-  .btn-muted { background: #fff; border-color: #dce0e6; color: #505966; }
-  .btn-muted:hover { background: #f0f2f5; border-color: #bcc4d0; }
+  .btn-muted { background: var(--btn-muted-bg); border-color: var(--btn-muted-border); color: var(--btn-muted-text); }
+  .btn-muted:hover { background: var(--btn-muted-hover-bg); border-color: var(--btn-muted-hover-border); }
+
+  /* theme segmented toggle */
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    background: var(--btn-muted-bg);
+    border: 1px solid var(--btn-muted-border);
+    border-radius: 999px;
+    padding: 2px;
+    gap: 2px;
+  }
+  .theme-btn {
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: var(--btn-muted-text);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    line-height: 1;
+    transition: background 0.15s, color 0.15s;
+  }
+  .theme-btn:hover { color: var(--text); }
+  .theme-btn.active {
+    background: var(--blue);
+    color: #fff;
+  }
   .btn-success { background: var(--green-soft); color: var(--green); border-color: #cce7db; }
   .btn-success:hover { background: #dff1e8; }
   .btn-warning { background: #fff8ec; color: var(--amber); border-color: #f0dfc2; }
@@ -321,14 +429,14 @@
     overflow-x: auto;
     border: 1px solid var(--line);
     border-radius: 6px;
-    background: #fff;
+    background: var(--table-bg);
     scrollbar-width: thin;
   }
   table { min-width: 680px; border-collapse: collapse; }
   #tab-users table { min-width: 520px; }
   thead {
-    background: #f1f3f6;
-    color: #707986;
+    background: var(--thead-bg);
+    color: var(--thead-text);
     border-bottom: 1px solid var(--line);
   }
   th {
@@ -338,15 +446,15 @@
     letter-spacing: 0;
   }
   tbody tr {
-    border-top: 1px solid #edf0f3;
+    border-top: 1px solid var(--row-border);
   }
   th, td { vertical-align: middle; }
   tbody td { font-size: 13px; height: 58px; }
   tbody tr:hover {
-    background: #f7f9fd;
+    background: var(--row-hover);
   }
   .modal-card {
-    background: #fff;
+    background: var(--modal-bg);
     border: 1px solid var(--line);
     border-radius: 8px;
     box-shadow: 0 24px 80px #181c2533;
@@ -656,8 +764,12 @@ SOFTWARE.
         <h2 id="section-title" class="text-2xl font-extrabold mt-1">用户管理</h2>
       </div>
       <div class="topbar-actions flex items-center gap-2">
+        <div id="theme-toggle" class="theme-toggle" role="group" aria-label="主题模式">
+          <button data-theme="system" class="theme-btn" title="跟随系统">跟随系统</button>
+          <button data-theme="light" class="theme-btn" title="明亮">明亮</button>
+          <button data-theme="dark" class="theme-btn" title="黑暗">黑暗</button>
+        </div>
         <button onclick="refreshAllData()" class="btn btn-muted" title="刷新数据" aria-label="刷新数据"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg><span>刷新数据</span></button>
-        <button onclick="copyScriptUrl()" class="btn btn-muted" title="复制脚本" aria-label="复制脚本"><svg class="icon" aria-hidden="true"><use href="#icon-copy"/></svg><span>复制脚本</span></button>
       </div>
     </div>
 
@@ -829,49 +941,41 @@ uuid: xxx
       <div id="routing-editor" aria-label="规则与 DNS 策略 YAML"></div>
       <div id="routing-status" role="status" class="text-sm mt-2"></div>
     </section>
-    <details>
-      <summary class="mb-3 cursor-pointer">旧版脚本</summary>
-    <!-- 基础脚本 (来自外部链接) -->
-    <div class="panel panel-pad mb-4">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="panel-title">Legacy 客户端脚本（不参与 Materialized）</h3>
-        <div class="flex gap-2 items-center">
-          <button onclick="copyScriptUrl()" class="btn btn-muted">复制脚本链接</button>
-          <button onclick="exportBaseScript()" class="btn btn-muted">导出脚本</button>
-        </div>
-      </div>
-      <p class="text-xs text-gray-400 mb-3">/script.js 与单链接 Materialized 都只使用随 Worker 构建、经过审计的脚本；生产 KV 中的旧脚本文本不会被执行或公开。</p>
-      <button onclick="toggleBaseScript()" class="btn-link mb-2" id="btn-toggle-base">
-        ▶ 查看基础脚本内容
-      </button>
-      <div id="base-script-wrap" class="hidden cm-base"></div>
-    </div>
-
-    <!-- 动态脚本停用说明 -->
-    <div class="panel panel-pad">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="panel-title">动态脚本覆盖（已停用）</h3>
-        <div class="flex gap-2 items-center">
-          <button id="btn-edit-script" class="btn btn-muted hidden" disabled>已停用</button>
-          <button id="btn-save-script" onclick="saveScript()" class="btn btn-primary hidden">保存</button>
-          <button id="btn-cancel-script" onclick="cancelEditScript()" class="btn btn-muted hidden">取消</button>
-        </div>
-      </div>
-      <p class="text-xs text-gray-500 mb-3">Workers 请求路径不再使用 eval/new Function。后续可调项会迁移到经过 schema 校验的 YAML/JSON 策略设置。</p>
-      <button onclick="toggleOverrideScript()" class="btn-link mb-2" id="btn-toggle-override">
-        ▶ 查看自定义脚本内容
-      </button>
-      <div id="override-script-wrap" class="hidden">
-        <div id="script-editor-wrap"></div>
-      </div>
-    </div>
-    </details>
   </div>
   </main>
 </div>
 
 <script>
 const BASE = location.origin;
+
+// ==================== Theme (system / light / dark) ====================
+(function () {
+  const KEY = 'admin_theme';
+  const media = window.matchMedia('(prefers-color-scheme: dark)');
+
+  function effectiveTheme(pref) {
+    return pref === 'system' ? (media.matches ? 'dark' : 'light') : pref;
+  }
+  function apply(pref) {
+    document.documentElement.dataset.theme = effectiveTheme(pref);
+    document.querySelectorAll('#theme-toggle .theme-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.theme === pref));
+  }
+  let pref = localStorage.getItem(KEY) || 'system';
+  apply(pref);
+
+  media.addEventListener('change', () => {
+    if ((localStorage.getItem(KEY) || 'system') === 'system') apply('system');
+  });
+
+  document.querySelectorAll('#theme-toggle .theme-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      pref = btn.dataset.theme;
+      localStorage.setItem(KEY, pref);
+      apply(pref);
+    });
+  });
+})();
 
 // ==================== Auth ====================
 async function login() {
@@ -913,8 +1017,6 @@ function showDashboard() {
   loadGlobalSettings();
   loadUpstreams();
   loadNodes();
-  loadScript();
-  loadScriptUrl();
 }
 
 // ==================== API Helper ====================
@@ -966,7 +1068,7 @@ function updateStats() {
 
 async function refreshAllData() {
   toast('刷新数据中...');
-  await Promise.all([loadUsers(), loadGlobalSettings(), loadUpstreams(), loadNodes(), loadScriptUrl()]);
+  await Promise.all([loadUsers(), loadGlobalSettings(), loadUpstreams(), loadNodes()]);
   toast('数据已刷新');
 }
 
@@ -988,8 +1090,6 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     localStorage.setItem('active_tab', btn.dataset.tab);
     if (btn.dataset.tab === 'script') {
       if (!_routingLoaded) loadRouting();
-      if (_cmOverride) setTimeout(() => _cmOverride.refresh(), 0);
-      if (_cmBase) setTimeout(() => _cmBase.refresh(), 0);
       if (_cmRouting) setTimeout(() => _cmRouting.refresh(), 0);
     }
   });
@@ -1590,118 +1690,6 @@ async function delNodeFromModal() {
   loadNodes();
 }
 
-// ==================== Script (CodeMirror) ====================
-let _cmBase = null;
-let _cmOverride = null;
-let _overrideBackup = '';
-
-function initCodeMirror() {
-  if (!_cmOverride) {
-    _cmOverride = CodeMirror(document.getElementById('script-editor-wrap'), {
-      mode: 'javascript', theme: 'dracula', lineNumbers: true,
-      lineWrapping: false, readOnly: true, tabSize: 2,
-      indentWithTabs: false, scrollbarStyle: 'native',
-    });
-  }
-  if (!_cmBase) {
-    _cmBase = CodeMirror(document.getElementById('base-script-wrap'), {
-      mode: 'javascript', theme: 'dracula', lineNumbers: true,
-      lineWrapping: false, readOnly: true, tabSize: 2,
-      indentWithTabs: false, scrollbarStyle: 'native',
-    });
-  }
-}
-
-async function loadScript() {
-  initCodeMirror();
-  const { data } = await api('/api/script');
-  _cmBase.setValue(data?.base || '');
-  _cmOverride.setValue(data?.override || '');
-  _overrideBackup = data?.override || '';
-  _cmOverride.setOption('readOnly', true);
-  document.getElementById('btn-edit-script').classList.add('hidden');
-  document.getElementById('btn-save-script').classList.add('hidden');
-  document.getElementById('btn-cancel-script').classList.add('hidden');
-}
-
-function toggleBaseScript() {
-  const wrap = document.getElementById('base-script-wrap');
-  const btn = document.getElementById('btn-toggle-base');
-  if (wrap.classList.contains('hidden')) {
-    wrap.classList.remove('hidden');
-    btn.textContent = '▼ 收起基础脚本内容';
-    setTimeout(() => _cmBase.refresh(), 0);
-  } else {
-    wrap.classList.add('hidden');
-    btn.textContent = '▶ 查看基础脚本内容';
-  }
-}
-
-function toggleOverrideScript() {
-  const wrap = document.getElementById('override-script-wrap');
-  const btn = document.getElementById('btn-toggle-override');
-  if (wrap.classList.contains('hidden')) {
-    wrap.classList.remove('hidden');
-    btn.textContent = '▼ 收起自定义脚本内容';
-    setTimeout(() => _cmOverride.refresh(), 0);
-  } else {
-    wrap.classList.add('hidden');
-    btn.textContent = '▶ 查看自定义脚本内容';
-  }
-}
-
-function toggleEditScript() {
-  _overrideBackup = _cmOverride.getValue();
-  _cmOverride.setOption('readOnly', false);
-  _cmOverride.focus();
-  document.getElementById('btn-edit-script').classList.add('hidden');
-  document.getElementById('btn-save-script').classList.remove('hidden');
-  document.getElementById('btn-cancel-script').classList.remove('hidden');
-}
-
-function cancelEditScript() {
-  _cmOverride.setValue(_overrideBackup);
-  _cmOverride.setOption('readOnly', true);
-  document.getElementById('btn-edit-script').classList.remove('hidden');
-  document.getElementById('btn-save-script').classList.add('hidden');
-  document.getElementById('btn-cancel-script').classList.add('hidden');
-}
-
-async function saveScript() {
-  const override = _cmOverride.getValue();
-  await api('/api/script', { method: 'POST', body: { override } });
-  _cmOverride.setOption('readOnly', true);
-  document.getElementById('btn-edit-script').classList.remove('hidden');
-  document.getElementById('btn-save-script').classList.add('hidden');
-  document.getElementById('btn-cancel-script').classList.add('hidden');
-  toast('自定义脚本已保存');
-}
-
-function copyScriptUrl() {
-  navigator.clipboard.writeText(`${BASE}/script.js`);
-  toast('脚本链接已复制');
-}
-
-async function loadScriptUrl() {
-  const { data } = await api('/api/script-url');
-  document.getElementById('script-url').value = data?.url || '';
-}
-
-async function saveScriptUrl() {
-  const url = document.getElementById('script-url').value.trim();
-  await api('/api/script-url', { method: 'POST', body: { url } });
-  toast(url ? '外部链接已保存，可手动同步基础脚本' : '外部链接已清除');
-}
-
-async function syncScriptFromUrl() {
-  const url = document.getElementById('script-url').value.trim();
-  if (!url) return toast('请填写 URL', false);
-  toast('同步中...');
-  const { ok, data } = await api('/api/script-url/sync', { method: 'POST' });
-  if (ok) { toast('基础脚本同步成功'); await loadScript(); }
-  else toast(data?.error || '同步失败', false);
-}
-
 // ==================== Import/Export ====================
 async function importMergeFile(input) {
   const file = input.files[0];
@@ -1774,39 +1762,6 @@ async function exportMergeFile() {
   const text = await resp.text();
   download('merge.yaml', text, 'text/yaml');
   toast('Merge 配置已导出');
-}
-
-async function importScriptFile(input) {
-  const file = input.files[0];
-  if (!file) return;
-  const text = await file.text();
-  // 导入脚本文件作为基础脚本
-  await api('/api/script-url/sync', { method: 'POST' }).catch(() => {});
-  // 直接写入 script-base（通过后端 sync 或直接上传）
-  // 简单方案：导入到基础脚本位置
-  const resp = await fetch(BASE + '/api/script/import-base', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base: text }),
-  });
-  if (resp.ok) {
-    toast('基础脚本已导入');
-    await loadScript();
-  } else {
-    toast('导入失败', false);
-  }
-  input.value = '';
-}
-
-async function exportBaseScript() {
-  const { data } = await api('/api/script');
-  if (data?.base) {
-    download('script.js', data.base, 'application/javascript');
-    toast('基础脚本已导出');
-  } else {
-    toast('暂无基础脚本', false);
-  }
 }
 
 function download(filename, content, type) {
