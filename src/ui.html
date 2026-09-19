@@ -832,6 +832,10 @@ SOFTWARE.
         <input id="new-user-name" placeholder="备注名（token 由服务端随机生成）" class="flex-1 px-3 py-2 border rounded text-sm">
         <button onclick="addUser()" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加用户</button>
       </div>
+      <div class="flex gap-2 mt-2">
+        <input id="new-user-token" placeholder="自定义链接（可选，≥16 位字母数字 - _；留空随机）" class="flex-1 px-3 py-2 border rounded text-sm font-mono">
+        <button onclick="genRandomToken()" class="btn btn-muted" title="生成随机链接">随机生成</button>
+      </div>
     </div>
     <div class="panel table-wrap">
       <table class="w-full text-sm">
@@ -908,6 +912,7 @@ SOFTWARE.
             <th class="text-left px-4 py-3">名称</th>
             <th class="text-left px-4 py-3">节点数</th>
             <th class="text-left px-4 py-3">最后更新</th>
+            <th class="text-left px-4 py-3">流量</th>
             <th class="text-left px-4 py-3">状态</th>
             <th class="text-left px-4 py-3">操作</th>
           </tr>
@@ -1201,13 +1206,22 @@ async function loadUsers() {
 async function addUser() {
   const name = document.getElementById('new-user-name').value.trim();
   if (!name) return toast('请填写备注名', false);
-  const { ok, data } = await api('/api/users', { method: 'POST', body: { name } });
+  const token = document.getElementById('new-user-token').value.trim();
+  const { ok, data } = await api('/api/users', { method: 'POST', body: { name, ...(token ? { token } : {}) } });
   toast(ok ? '添加成功' : (data?.error || '添加失败'), ok);
   if (ok) {
     document.getElementById('new-user-name').value = '';
+    document.getElementById('new-user-token').value = '';
     showIssuedSubscription(name, data.token);
     loadUsers();
   }
+}
+
+function genRandomToken() {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  const bytes = new Uint8Array(20);
+  crypto.getRandomValues(bytes);
+  document.getElementById('new-user-token').value = Array.from(bytes, b => chars[b % chars.length]).join('');
 }
 
 function copySubUrl(token, mode) {
@@ -1241,7 +1255,10 @@ function showIssuedSubscription(name, token) {
 async function rotateUserToken(userId) {
   const user = _usersData.find(item => item.id === userId);
   if (!user || !confirm(`轮换 ${user.name} 的订阅链接？旧链接会失效，但跨地域传播可能有短暂延迟。`)) return;
-  const { ok, data } = await api(`/api/users/${encodeURIComponent(userId)}/rotate`, { method: 'POST' });
+  const custom = window.prompt('自定义新链接（≥16 位字母数字 - _；留空则随机生成）：', '');
+  if (custom === null) return; // cancelled
+  const body = custom.trim() ? { token: custom.trim() } : {};
+  const { ok, data } = await api(`/api/users/${encodeURIComponent(userId)}/rotate`, { method: 'POST', body });
   if (!ok) return toast(data?.error || '轮换失败', false);
   showIssuedSubscription(user.name, data.token);
   toast('新链接已生成，旧链接已失效');
@@ -1432,18 +1449,45 @@ async function saveUpstream() {
   }
 }
 
+function formatBytes(n) {
+  if (n === undefined || n === null || !Number.isFinite(n)) return '';
+  const units = ['B','KB','MB','GB','TB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)}${units[i]}`;
+}
+
+function formatUsage(usage) {
+  if (!usage) return '<span class="text-gray-400">-</span>';
+  const used = (usage.upload || 0) + (usage.download || 0);
+  const parts = [];
+  if (usage.total) {
+    const pct = Math.min(100, Math.round(used / usage.total * 100));
+    parts.push(`<span class="font-semibold">${formatBytes(used)}</span><span class="text-gray-400"> / ${formatBytes(usage.total)}</span> <span class="text-gray-500">(${pct}%)</span>`);
+  } else {
+    parts.push(`<span class="font-semibold">${formatBytes(used)}</span>`);
+  }
+  if (usage.expire) {
+    const d = new Date(usage.expire * 1000);
+    const days = Math.ceil((d - Date.now()) / 86400000);
+    parts.push(`<br><span class="${days <= 7 ? 'text-red-500' : 'text-gray-500'}">${days <= 0 ? '已到期' : `剩 ${days} 天`} · ${d.toLocaleDateString()}</span>`);
+  }
+  return parts.join('');
+}
+
 async function loadUpstreams() {
   const { data } = await api('/api/upstreams');
   const tbody = document.getElementById('upstreams-table');
   _upstreamsData = data || [];
   updateStats();
-  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="6" class="px-4 py-8 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
+  if (!data || !data.length) { tbody.innerHTML = '<tr><td colspan="7" class="px-4 py-8 text-gray-400 text-center">暂无订阅</td></tr>'; return; }
   tbody.innerHTML = data.map(u => `
     <tr class="cursor-pointer" data-upstream-name="${attr(u.name)}" onclick="toggleUpstreamNodes(this.dataset.upstreamName)">
       <td class="px-4 py-3 text-gray-400" id="arrow-${attr(domId(u.name))}">&#9654;</td>
       <td class="px-4 py-3 font-semibold">${esc(u.name)}</td>
       <td class="px-4 py-3">${esc(u.nodeCount)}</td>
       <td class="px-4 py-3 text-gray-500 text-xs">${u.lastUpdate ? new Date(u.lastUpdate).toLocaleString() : '-'}</td>
+      <td class="px-4 py-3 text-xs">${formatUsage(u.usage)}</td>
       <td class="px-4 py-3">${u.fetchMode === 'mirror'
         ? '<span class="status-pill status-muted">镜像拉取</span>'
         : u.fetchMode === 'disabled'
@@ -1462,7 +1506,7 @@ async function loadUpstreams() {
       </td>
     </tr>
     <tr id="nodes-row-${attr(domId(u.name))}" class="hidden">
-      <td colspan="6" class="px-4 py-2 bg-gray-50">
+      <td colspan="7" class="px-4 py-2 bg-gray-50">
         <div class="flex items-center gap-2 mb-2">
           <span id="nodes-summary-${attr(domId(u.name))}" class="text-xs text-gray-500">加载中...</span>
           <button data-upstream-name="${attr(u.name)}" onclick="event.stopPropagation(); testAllUpstreamNodes(this.dataset.upstreamName)" class="btn btn-warning !min-h-0 !py-1 !px-2 text-xs">全部测速</button>

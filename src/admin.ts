@@ -67,6 +67,7 @@ async function getConfiguredUpstreams(env: Env): Promise<Upstream[]> {
         : true,
       consecutiveFailures: status?.consecutiveFailures ?? 0,
       nextRetryAt: status?.nextRetryAt ?? null,
+      usage: status?.usage ?? null,
     };
   }));
 }

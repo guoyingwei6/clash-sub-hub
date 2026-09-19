@@ -4,6 +4,7 @@ import {
   issueSubscriptionToken,
   legacyUserId,
   newUserId,
+  TokenValidationError,
 } from './domain/token';
 
 export async function listUsers(env: Env): Promise<Response> {
@@ -23,11 +24,20 @@ export async function listUsers(env: Env): Promise<Response> {
 }
 
 export async function createUser(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { name: string };
+  const body = (await request.json()) as { name: string; token?: string };
   if (!body.name?.trim()) return Response.json({ error: 'name 必填' }, { status: 400 });
 
   const users = await loadUsers(env);
-  const issued = await issueSubscriptionToken();
+  let issued;
+  try {
+    issued = await issueSubscriptionToken(body.token?.trim() || undefined);
+  } catch (e) {
+    if (e instanceof TokenValidationError) return Response.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
+  if (body.token?.trim() && users.some(u => u.tokenHash === issued.tokenHash)) {
+    return Response.json({ error: '该链接已被使用' }, { status: 409 });
+  }
 
   users.push({
     id: newUserId(),
@@ -90,7 +100,7 @@ export async function deleteUser(identifier: string, env: Env): Promise<Response
   return Response.json({ ok: true });
 }
 
-export async function rotateUserToken(identifier: string, env: Env): Promise<Response> {
+export async function rotateUserToken(identifier: string, request: Request, env: Env): Promise<Response> {
   const users = await loadUsers(env);
   if (users.length === 0) {
     return Response.json({ error: '用户不存在' }, { status: 404 });
@@ -99,7 +109,17 @@ export async function rotateUserToken(identifier: string, env: Env): Promise<Res
   if (userIndex === -1) return Response.json({ error: '用户不存在' }, { status: 404 });
 
   const user = users[userIndex];
-  const issued = await issueSubscriptionToken();
+  const body = await request.json().catch(() => ({})) as { token?: string };
+  let issued;
+  try {
+    issued = await issueSubscriptionToken(body.token?.trim() || undefined);
+  } catch (e) {
+    if (e instanceof TokenValidationError) return Response.json({ error: e.message }, { status: 400 });
+    throw e;
+  }
+  if (body.token?.trim() && users.some((u, i) => i !== userIndex && u.tokenHash === issued.tokenHash)) {
+    return Response.json({ error: '该链接已被使用' }, { status: 409 });
+  }
   user.id = await resolvedUserId(user);
   user.tokenHash = issued.tokenHash;
   user.tokenPrefix = issued.tokenPrefix;

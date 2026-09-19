@@ -31,6 +31,7 @@ export interface Upstream {
   lastUpdate: string | null;
   nodeCount: number;
   lastError: string | null;
+  usage?: UpstreamUsage | null;
 }
 
 export interface GlobalSettings {
@@ -49,6 +50,7 @@ export interface UpstreamRuntimeState {
   consecutiveFailures: number;
   nextRetryAt: string | null;
   sourceFingerprint: string;
+  usage?: UpstreamUsage | null;
 }
 
 export interface CachedUpstream {
@@ -58,6 +60,14 @@ export interface CachedUpstream {
   updatedAt: string;
   nodeCount: number;
   content: string;
+  usage?: UpstreamUsage | null;
+}
+
+export interface UpstreamUsage {
+  upload?: number;
+  download?: number;
+  total?: number;
+  expire?: number; // unix seconds
 }
 
 export interface ProxyNode {

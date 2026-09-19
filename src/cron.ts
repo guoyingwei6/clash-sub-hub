@@ -1,4 +1,22 @@
-import { Env, GlobalSettings, UpstreamRuntimeState } from './types';
+import { Env, GlobalSettings, UpstreamRuntimeState, UpstreamUsage } from './types';
+
+// Parse "subscription-userinfo: upload=123; download=456; total=789; expire=1700000000"
+function parseSubscriptionUserinfo(header: string | null): UpstreamUsage | null {
+  if (!header) return null;
+  const usage: UpstreamUsage = {};
+  for (const part of header.split(';')) {
+    const [key, raw] = part.trim().split('=');
+    if (!key || !raw) continue;
+    const value = Number(raw.trim());
+    if (!Number.isFinite(value)) continue;
+    const k = key.trim().toLowerCase();
+    if (k === 'upload') usage.upload = value;
+    else if (k === 'download') usage.download = value;
+    else if (k === 'total') usage.total = value;
+    else if (k === 'expire') usage.expire = value;
+  }
+  return Object.keys(usage).length ? usage : null;
+}
 import { UpstreamDefinition } from './domain/config';
 import { canAttemptRefresh, nextRetryAt } from './domain/cache-policy';
 import { parseClashYaml } from './converter';
@@ -105,6 +123,7 @@ export async function fetchUpstream(
       }
 
       const timestamp = now.toISOString();
+      const usage = parseSubscriptionUserinfo(response.headers.get('subscription-userinfo'));
       await putUpstreamCache(env.KV, {
         schemaVersion: 1,
         upstreamId: upstream.id,
@@ -112,6 +131,7 @@ export async function fetchUpstream(
         updatedAt: timestamp,
         nodeCount: nodes.length,
         content,
+        usage,
       });
       const state: UpstreamRuntimeState = {
         upstreamId: upstream.id,
@@ -123,6 +143,7 @@ export async function fetchUpstream(
         consecutiveFailures: 0,
         nextRetryAt: null,
         sourceFingerprint: fingerprint,
+        usage,
       };
       await putUpstreamState(env.KV, state);
       return state;
@@ -138,6 +159,7 @@ export async function fetchUpstream(
     lastSuccessAt: previous?.lastSuccessAt ?? null,
     cacheUpdatedAt: previous?.cacheUpdatedAt ?? null,
     nodeCount: previous?.nodeCount ?? 0,
+    usage: previous?.usage ?? null,
     lastError: `全部 ${allUAs.length} 个 UA 失败 (${errors.slice(0, 3).join('; ')})`,
     consecutiveFailures,
     nextRetryAt: nextRetryAt(now, consecutiveFailures),

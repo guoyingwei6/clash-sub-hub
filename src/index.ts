@@ -167,7 +167,7 @@ async function routeApi(
 
   const userRotateMatch = path.match(/^\/api\/users\/([^/]+)\/rotate$/);
   if (userRotateMatch && method === 'POST') {
-    return rotateUserToken(decodeURIComponent(userRotateMatch[1]), env);
+    return rotateUserToken(decodeURIComponent(userRotateMatch[1]), request, env);
   }
 
   const userMatch = path.match(/^\/api\/users\/([^/]+)$/);

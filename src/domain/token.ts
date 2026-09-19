@@ -1,5 +1,8 @@
 const TOKEN_BYTES = 32;
 const PREFIX_LENGTH = 8;
+const MIN_CUSTOM_TOKEN_LEN = 16;
+const MAX_CUSTOM_TOKEN_LEN = 128;
+const TOKEN_RE = /^[A-Za-z0-9_-]+$/;
 
 export interface IssuedToken {
   token: string;
@@ -7,7 +10,16 @@ export interface IssuedToken {
   tokenPrefix: string;
 }
 
-export async function issueSubscriptionToken(): Promise<IssuedToken> {
+export async function issueSubscriptionToken(customToken?: string): Promise<IssuedToken> {
+  if (customToken !== undefined) {
+    const token = customToken.trim();
+    validateCustomToken(token);
+    return {
+      token,
+      tokenHash: await hashSubscriptionToken(token),
+      tokenPrefix: token.slice(0, PREFIX_LENGTH),
+    };
+  }
   const bytes = crypto.getRandomValues(new Uint8Array(TOKEN_BYTES));
   const token = bytesToBase64Url(bytes);
   return {
@@ -15,6 +27,25 @@ export async function issueSubscriptionToken(): Promise<IssuedToken> {
     tokenHash: await hashSubscriptionToken(token),
     tokenPrefix: token.slice(0, PREFIX_LENGTH),
   };
+}
+
+export function validateCustomToken(token: string): void {
+  if (token.length < MIN_CUSTOM_TOKEN_LEN) {
+    throw new TokenValidationError(`自定义链接至少 ${MIN_CUSTOM_TOKEN_LEN} 位`);
+  }
+  if (token.length > MAX_CUSTOM_TOKEN_LEN) {
+    throw new TokenValidationError(`自定义链接最长 ${MAX_CUSTOM_TOKEN_LEN} 位`);
+  }
+  if (!TOKEN_RE.test(token)) {
+    throw new TokenValidationError('链接只能包含字母、数字、-、_');
+  }
+}
+
+export class TokenValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TokenValidationError';
+  }
 }
 
 export async function hashSubscriptionToken(token: string): Promise<string> {

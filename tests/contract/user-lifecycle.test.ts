@@ -42,7 +42,7 @@ describe('user token lifecycle', () => {
       body: JSON.stringify({ name: 'fixture recipient', token: 'caller-chosen-token' }),
     }), env);
     const createBody = await created.json() as { token: string };
-    expect(createBody.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(createBody.token).toBe('caller-chosen-token');
 
     const stored = JSON.parse(kv.peek('users') || '[]') as User[];
     expect(stored).toHaveLength(1);
@@ -81,7 +81,7 @@ describe('user token lifecycle', () => {
       env
     )).status).toBe(200);
 
-    const rotated = await rotateUserToken(legacyView.id, env);
+    const rotated = await rotateUserToken(legacyView.id, new Request('https://example.com/api', { method: 'POST', body: '{}' }), env);
     const rotateBody = await rotated.json() as { token: string };
     const afterRotate = JSON.parse(kv.peek('users') || '[]') as User[];
     expect(afterRotate[0].token).toBeUndefined();
