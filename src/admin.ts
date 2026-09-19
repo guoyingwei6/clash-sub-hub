@@ -39,7 +39,7 @@ import {
   rebuildDefaultMaterializedArtifact,
 } from './subscription';
 
-async function getConfiguredUpstreams(env: Env): Promise<Upstream[]> {
+export async function getConfiguredUpstreams(env: Env): Promise<Upstream[]> {
   const config = await loadActiveDesiredConfig(env.KV);
   return Promise.all(config.upstreams.map(async (definition) => {
     const status = await getUpstreamState(env.KV, definition);

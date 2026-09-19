@@ -1,5 +1,36 @@
-import { Env, User, ProxyNode } from './types';
+import { Env, User, ProxyNode, Upstream } from './types';
 import { stringifyYaml } from './yaml';
+import { getConfiguredUpstreams } from './admin';
+
+export async function handleUserStatus(token: string, env: Env): Promise<Response> {
+  const userResult = await resolveUser(token, env);
+  if (userResult.response) return userResult.response;
+  const user = userResult.user!;
+
+  const upstreams = await getConfiguredUpstreams(env);
+  const perUpstream = upstreams
+    .filter((u): u is Upstream & { usage: NonNullable<Upstream['usage']> } =>
+      Boolean(u.usage && (u.usage.upload || u.usage.download || u.usage.total)))
+    .map(u => ({ name: u.name, usage: u.usage }));
+
+  const totals = perUpstream.reduce((acc, u) => ({
+    upload: (acc.upload ?? 0) + (u.usage.upload ?? 0),
+    download: (acc.download ?? 0) + (u.usage.download ?? 0),
+    total: (acc.total ?? 0) + (u.usage.total ?? 0),
+    expire: Math.min(acc.expire ?? Infinity, u.usage.expire ?? Infinity),
+  }), {} as { upload?: number; download?: number; total?: number; expire?: number });
+  if (totals.expire === Infinity) delete totals.expire;
+
+  return Response.json({
+    user: { name: user.name, tokenPrefix: user.tokenPrefix },
+    upstreamCount: upstreams.length,
+    reportingCount: perUpstream.length,
+    totals,
+    perUpstream,
+    updatedAt: new Date().toISOString(),
+  }, { headers: { 'Cache-Control': 'no-store' } });
+}
+
 import {
   parseClashYaml,
   filterNodes,

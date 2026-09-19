@@ -6,7 +6,7 @@ import {
   createAdminSession,
   unauthorized,
 } from './auth';
-import { handleMerge, handleSubscription } from './subscription';
+import { handleMerge, handleSubscription, handleUserStatus } from './subscription';
 import { handleScheduled } from './cron';
 import { builtinScriptContent } from './generated/script-content';
 import { adminCss, codeMirrorJs } from './generated/admin-assets';
@@ -54,6 +54,12 @@ export default {
       const format = url.searchParams.get('format');
       const mode = url.searchParams.get('mode');
       return handleSubscription(subMatch[1], format, mode, env);
+    }
+
+    // 公开接口：用户流量状态（订阅 token 鉴权）
+    const statusMatch = path.match(/^\/sub\/([^/]+)\/status$/);
+    if (statusMatch) {
+      return handleUserStatus(decodeURIComponent(statusMatch[1]), env);
     }
 
     // 公开接口：Clash Verge Merge 覆写配置
