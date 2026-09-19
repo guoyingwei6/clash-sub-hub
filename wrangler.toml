@@ -8,7 +8,7 @@ routes = [{ pattern = "clash.guoyingwei.top", custom_domain = true }]
 DEPLOYMENT_ENVIRONMENT = "production"
 
 [triggers]
-crons = ["17 * * * *"]
+crons = ["15 */6 * * *"]
 
 [[kv_namespaces]]
 binding = "KV"

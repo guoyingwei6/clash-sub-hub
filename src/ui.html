@@ -111,6 +111,44 @@
   #new-up-url { flex: 1 1 260px; }
   #new-node-yaml { min-height: 170px; height: 190px; background: #fff; padding: 14px 16px; }
   #routing-yaml { border-radius: 6px; background: #fff; padding: 18px; line-height: 1.9; }
+
+  /* GitHub-style code editor for the routing YAML pane */
+  #routing-editor .CodeMirror {
+    height: auto;
+    min-height: 420px;
+    border: 1px solid #d0d7de;
+    border-radius: 6px;
+    background: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  #routing-editor .CodeMirror pre.CodeMirror-line,
+  #routing-editor .CodeMirror pre.CodeMirror-line-like {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: 1.45;
+    padding: 0 8px;
+  }
+  #routing-editor .CodeMirror-gutters {
+    background: #f6f8fa;
+    border-right: 1px solid #d0d7de;
+  }
+  #routing-editor .CodeMirror-linenumber {
+    color: #57606a;
+    font-size: 12px;
+    padding: 0 8px 0 12px;
+    min-width: 28px;
+  }
+  #routing-editor .CodeMirror-cursor { border-left: 1px solid #24292f; }
+  #routing-editor .CodeMirror-selected,
+  #routing-editor .CodeMirror-focused .CodeMirror-selected { background: #ddf4ff; }
+  /* GitHub-ish YAML token colours */
+  #routing-editor .cm-atom, #routing-editor .cm-def { color: #0550ae; }
+  #routing-editor .cm-string, #routing-editor .cm-string-2 { color: #0a3069; }
+  #routing-editor .cm-number, #routing-editor .cm-keyword { color: #cf222e; }
+  #routing-editor .cm-property { color: #0550ae; }
+  #routing-editor .cm-comment { color: #57606a; font-style: italic; }
   #tab-script section > .flex > .flex { flex-wrap: wrap; }
   #tab-script details { border-top: 1px solid var(--line); margin-top: 24px; padding-top: 16px; }
   #tab-script summary { font-size: 12px; color: var(--muted); }
@@ -788,7 +826,7 @@ uuid: xxx
           <button id="save-routing" onclick="saveRouting()" class="btn btn-primary">保存策略</button>
         </div>
       </div>
-      <textarea id="routing-yaml" aria-label="规则与 DNS 策略 YAML" rows="24" spellcheck="false" class="w-full font-mono text-sm border p-3" style="resize:vertical;min-height:320px;box-sizing:border-box"></textarea>
+      <div id="routing-editor" aria-label="规则与 DNS 策略 YAML"></div>
       <div id="routing-status" role="status" class="text-sm mt-2"></div>
     </section>
     <details>
@@ -952,18 +990,31 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
       if (!_routingLoaded) loadRouting();
       if (_cmOverride) setTimeout(() => _cmOverride.refresh(), 0);
       if (_cmBase) setTimeout(() => _cmBase.refresh(), 0);
+      if (_cmRouting) setTimeout(() => _cmRouting.refresh(), 0);
     }
   });
 });
 
 let _routingRevision = '';
 let _routingLoaded = false;
+let _cmRouting = null;
+
+function initRoutingEditor() {
+  if (_cmRouting) return _cmRouting;
+  _cmRouting = CodeMirror(document.getElementById('routing-editor'), {
+    mode: 'yaml', theme: 'default', lineNumbers: true,
+    lineWrapping: false, readOnly: false, tabSize: 2,
+    indentWithTabs: false, scrollbarStyle: 'native',
+  });
+  return _cmRouting;
+}
+
 async function loadRouting() {
   const {ok, data} = await api('/api/routing');
   if (!ok) return toast(data?.error || '策略读取失败', false);
   _routingRevision = data.revision;
   _routingLoaded = true;
-  document.getElementById('routing-yaml').value = data.yaml || '';
+  initRoutingEditor().setValue(data.yaml || '');
   setText('routing-status', data.yaml ? '已加载' : '尚未设置独立策略');
 }
 async function saveRouting() {
@@ -972,7 +1023,7 @@ async function saveRouting() {
   button.disabled = true;
   try {
     const {ok, data} = await api('/api/routing', {method:'PUT', body:{
-      yaml: document.getElementById('routing-yaml').value,
+      yaml: initRoutingEditor().getValue(),
       expectedRevision: _routingRevision,
     }});
     if (!ok) {
@@ -987,12 +1038,12 @@ async function saveRouting() {
 async function importRoutingFile(input) {
   if (!input.files[0]) return;
   if (!_routingLoaded) await loadRouting();
-  document.getElementById('routing-yaml').value = await input.files[0].text();
+  initRoutingEditor().setValue(await input.files[0].text());
   setText('routing-status', '未保存');
   input.value = '';
 }
 function exportRouting() {
-  download('routing-dns.yaml', document.getElementById('routing-yaml').value, 'text/yaml');
+  download('routing-dns.yaml', initRoutingEditor().getValue(), 'text/yaml');
 }
 
 // ==================== Users ====================
