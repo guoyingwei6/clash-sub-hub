@@ -81,6 +81,15 @@ async function mutateDesiredConfig(
   const before = toDraft(current);
   const draft = structuredClone(before);
   mutate(draft);
+  // Keep the saved routing policy in sync with upstream deletions, including
+  // references left behind by earlier versions. Unavailable but configured
+  // upstreams remain references and must still pass materialization checks.
+  const upstreamNames = new Set(draft.upstreams.map((upstream) => upstream.name));
+  for (const group of draft.policy.routingProfile?.['proxy-groups'] ?? []) {
+    if (Array.isArray(group.use)) {
+      group.use = group.use.filter((name) => upstreamNames.has(name));
+    }
+  }
   const diff = diffDesiredConfig(before, draft);
   const cacheSensitive = diff.upstreams.added.length > 0
     || diff.upstreams.updated.some((item) => item.changedFields.some(
