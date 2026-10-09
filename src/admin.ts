@@ -377,10 +377,10 @@ export async function listUpstreamNodes(name: string, env: Env): Promise<Respons
   const upstream = config.upstreams.find((item) => item.name === name);
   if (!upstream) return Response.json({ error: '不存在' }, { status: 404 });
   const cache = await getUpstreamCache(env.KV, upstream);
-  if (!cache) return Response.json({ nodes: [] });
+  if (!cache) return Response.json({ total: 0, filtered: 0, nodes: [] });
 
   const nodes = parseClashYaml(cache.content);
-  const filtered = filterNodes(nodes);
+  const filtered = config.policy.filterUpstreamInfoNodes ? filterNodes(nodes) : nodes;
   return Response.json({
     total: nodes.length,
     filtered: filtered.length,

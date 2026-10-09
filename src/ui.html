@@ -1547,8 +1547,20 @@ async function toggleUpstreamNodes(name) {
   const el = document.getElementById(`nodes-list-${key}`);
   summary.textContent = '加载中...';
   el.innerHTML = '';
-  const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/nodes`);
-  if (!data || !data.nodes || data.nodes.length === 0) {
+  const { ok, data, error } = await api(`/api/upstreams/${encodeURIComponent(name)}/nodes`);
+  if (!ok) {
+    summary.textContent = `节点加载失败：${error}`;
+    return;
+  }
+  if (!Array.isArray(data?.nodes)) {
+    summary.textContent = '节点加载失败：服务器返回的数据格式无效';
+    return;
+  }
+  if (data.total > 0 && data.nodes.length === 0) {
+    summary.textContent = `已缓存 ${data.total} 个节点，全部被信息节点过滤规则排除；可在全局默认设置中查看过滤开关`;
+    return;
+  }
+  if (data.nodes.length === 0) {
     summary.textContent = '暂无缓存节点（请先刷新）';
     return;
   }
