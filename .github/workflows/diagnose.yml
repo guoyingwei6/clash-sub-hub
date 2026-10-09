@@ -31,11 +31,25 @@ jobs:
           try {
             await new Promise(resolve => setTimeout(resolve, 8000));
             const base = 'https://clash.guoyingwei.top';
-            const headers = { Authorization: `Bearer ${process.env.ADMIN_PASSWORD}` };
+            const login = await fetch(base + '/api/admin/session', { method: 'POST', headers: { Authorization: `Bearer ${process.env.ADMIN_PASSWORD}` } });
+            if (!login.ok) throw new Error('Cannot create admin session');
+            const cookie = login.headers.get('set-cookie');
+            if (!cookie?.includes('Max-Age=2592000')) throw new Error('Session duration is not 30 days');
+            console.log('SESSION', login.status, '30 days');
+            const headers = { Cookie: cookie.split(';', 1)[0] };
             const list = await fetch(base + '/api/upstreams', { headers });
             console.log('LIST', list.status);
             if (!list.ok) throw new Error('Cannot read upstreams');
             const upstreams = await list.json();
+            const edit = upstreams.find(item => item.fetchMode === 'disabled');
+            if (edit) {
+              const saved = await fetch(base + '/api/upstreams/' + encodeURIComponent(edit.name), { method: 'PUT', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify({url:edit.url,userAgent:edit.userAgent,prefix:edit.prefix,exclude:edit.exclude,fetchMode:edit.fetchMode}) });
+              console.log('SAVE_DISABLED', saved.status);
+              if (!saved.ok) throw new Error('Disabled upstream save failed');
+              const after = await (await fetch(base + '/api/upstreams', { headers })).json();
+              if (after.find(item => item.name === edit.name)?.fetchMode !== 'disabled') throw new Error('Save unexpectedly enabled upstream');
+              console.log('DISABLED_PRESERVED', true);
+            }
             const upstream = upstreams.find(item => item.fetchMode === 'server' && item.nodeCount > 0);
             if (!upstream) throw new Error('No configured server upstream available');
             const response = await fetch(base + '/api/upstreams/' + encodeURIComponent(upstream.name) + '/refresh', { method: 'POST', headers, signal: AbortSignal.timeout(45000) });

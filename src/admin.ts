@@ -300,7 +300,10 @@ export async function updateUpstream(
   request: Request,
   env: Env
 ): Promise<Response> {
-  const body = (await request.json()) as { url?: string; userAgent?: string; exclude?: string; prefix?: string; localFetch?: boolean };
+  const body = (await request.json()) as { url?: string; userAgent?: string; exclude?: string; prefix?: string; localFetch?: boolean; fetchMode?: UpstreamDefinition['fetchMode'] };
+  if (body.fetchMode !== undefined && !['server', 'mirror', 'disabled'].includes(body.fetchMode)) {
+    return Response.json({ error: '拉取模式无效' }, { status: 400 });
+  }
   if (body.url !== undefined) {
     try {
       const parsedUrl = new URL(body.url);
@@ -322,7 +325,10 @@ export async function updateUpstream(
       if (body.userAgent !== undefined) upstream.userAgent = body.userAgent;
       if ('exclude' in body) upstream.exclude = body.exclude;
       if ('prefix' in body) upstream.prefix = adminPrefix(body.prefix, upstream.name);
-      if ('localFetch' in body) upstream.fetchMode = body.localFetch ? 'mirror' : 'server';
+      if (body.fetchMode !== undefined) upstream.fetchMode = body.fetchMode;
+      else if ('localFetch' in body && (body.localFetch || upstream.fetchMode !== 'disabled')) {
+        upstream.fetchMode = body.localFetch ? 'mirror' : 'server';
+      }
     });
     if (!found) return Response.json({ error: '不存在' }, { status: 404 });
     return Response.json({ ok: true });

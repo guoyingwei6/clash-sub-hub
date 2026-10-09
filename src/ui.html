@@ -699,13 +699,14 @@ SOFTWARE.
       </div>
       <div class="flex items-center justify-between">
         <div>
-          <label class="block text-sm text-gray-600">受信任镜像模式</label>
+          <label for="edit-fetch-mode" class="block text-sm text-gray-600">拉取模式</label>
           <span class="text-xs text-gray-400">CF 无法拉取时，由受信任抓取器用 HMAC 上传缓存；不会把机场 URL 交给客户端</span>
         </div>
-        <label class="relative inline-flex items-center cursor-pointer">
-          <input type="checkbox" id="edit-local-fetch" class="sr-only peer">
-          <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-blue-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
-        </label>
+        <select id="edit-fetch-mode" class="px-3 py-2 border rounded text-sm">
+          <option value="server">服务器拉取</option>
+          <option value="mirror">受信任镜像</option>
+          <option value="disabled">停用</option>
+        </select>
       </div>
     </div>
     <div class="flex justify-between mt-4">
@@ -1056,15 +1057,29 @@ async function api(path, opts = {}) {
     headers['Content-Type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
-  const r = await fetch(BASE + path, {
-    ...opts,
-    headers,
-    credentials: 'same-origin',
-  });
+  let r;
+  try {
+    r = await fetch(BASE + path, {
+      ...opts,
+      headers,
+      credentials: 'same-origin',
+    });
+  } catch (error) {
+    return { ok: false, status: 0, data: null, error: `网络请求失败：${error.message}` };
+  }
   if (r.status === 401 && path !== '/api/admin/session') {
     showLogin();
   }
-  return { ok: r.ok, status: r.status, data: await r.json().catch(() => null) };
+  const data = await r.json().catch(() => null);
+  const ray = r.headers.get('cf-ray');
+  const detail = `HTTP ${r.status}${ray ? `，请求 ${ray}` : ''}`;
+  return {
+    ok: r.ok && data !== null,
+    status: r.status,
+    data,
+    error: typeof data?.error === 'string' ? data.error
+      : (data === null ? `服务器未返回有效 JSON（${detail}）` : `请求失败（${detail}）`),
+  };
 }
 
 function toast(msg, ok = true) {
@@ -1406,7 +1421,7 @@ function editUpstream(name) {
   renderUACheckboxes('edit-ua-list', u.userAgent);
   document.getElementById('edit-exclude').value = u.exclude || '';
   document.getElementById('edit-prefix').value = u.prefix !== undefined ? u.prefix : '';
-  document.getElementById('edit-local-fetch').checked = !!u.localFetch;
+  document.getElementById('edit-fetch-mode').value = u.fetchMode;
   document.getElementById('edit-test-result').classList.add('hidden');
   document.getElementById('edit-modal').classList.remove('hidden');
 }
@@ -1436,16 +1451,16 @@ async function saveUpstream() {
   const ua = getSelectedUA('edit-ua-list');
   const exclude = document.getElementById('edit-exclude').value.trim();
   const prefix = document.getElementById('edit-prefix').value;
-  const localFetch = document.getElementById('edit-local-fetch').checked;
-  const { ok, data } = await api(`/api/upstreams/${encodeURIComponent(_editingName)}`, {
-    method: 'PUT', body: { url, userAgent: ua || undefined, exclude: exclude || undefined, prefix: prefix || undefined, localFetch }
+  const fetchMode = document.getElementById('edit-fetch-mode').value;
+  const { ok, error } = await api(`/api/upstreams/${encodeURIComponent(_editingName)}`, {
+    method: 'PUT', body: { url, userAgent: ua || undefined, exclude: exclude || undefined, prefix: prefix || undefined, fetchMode }
   });
   if (ok) {
     toast('已保存');
     closeEditModal();
     loadUpstreams();
   } else {
-    toast(data?.error || '保存失败', false);
+    toast(`保存失败：${error}`, false);
   }
 }
 
@@ -1614,8 +1629,9 @@ async function addUpstream() {
 
 async function refreshOne(name) {
   toast('刷新中...');
-  const { data } = await api(`/api/upstreams/${encodeURIComponent(name)}/refresh`, { method: 'POST' });
-  toast(data?.ok ? `刷新成功! ${data.nodeCount} 个节点` : `刷新失败: ${data?.error}`, data?.ok);
+  const { ok, data, error } = await api(`/api/upstreams/${encodeURIComponent(name)}/refresh`, { method: 'POST' });
+  const success = ok && data?.ok === true;
+  toast(success ? `刷新成功! ${data.nodeCount} 个节点` : `刷新失败：${error}`, success);
   loadUpstreams();
 }
 
@@ -1646,8 +1662,12 @@ async function delUpstreamFromModal() {
 
 async function refreshAllUpstreams() {
   toast('刷新中...');
-  await api('/api/refresh', { method: 'POST' });
-  toast('刷新完成');
+  const { ok, data, error } = await api('/api/refresh', { method: 'POST' });
+  const success = ok && data?.ok === true;
+  const failure = ok
+    ? `${data.failed} 个上游失败${data.artifactReady ? '' : '，完整订阅生成失败'}`
+    : error;
+  toast(success ? '刷新完成' : `刷新失败：${failure}`, success);
   loadUpstreams();
 }
 
