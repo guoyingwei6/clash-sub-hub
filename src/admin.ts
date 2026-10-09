@@ -74,7 +74,8 @@ export async function getConfiguredUpstreams(env: Env): Promise<Upstream[]> {
 
 async function mutateDesiredConfig(
   env: Env,
-  mutate: (draft: DesiredConfigDraft) => void
+  mutate: (draft: DesiredConfigDraft) => void,
+  materialize = true
 ): Promise<void> {
   const current = await loadActiveDesiredConfig(env.KV);
   const before = toDraft(current);
@@ -89,7 +90,7 @@ async function mutateDesiredConfig(
       (field) => ['missingCache', 'maxCacheAgeSeconds'].includes(field)
   );
   if (cacheSensitive) await prepareConfiguredCaches(draft, env);
-  const artifact = diff.hasChanges
+  const artifact = diff.hasChanges && materialize
     ? await buildDefaultMaterializedArtifact(draft, env)
     : undefined;
   await publishDesiredConfig(
@@ -324,12 +325,14 @@ export async function updateUpstream(
 export async function deleteUpstream(name: string, env: Env): Promise<Response> {
   try {
     let found = false;
+    // Deletion must remain possible when the remaining sources cannot produce
+    // a subscription. Publishing without an artifact invalidates the old one.
     await mutateDesiredConfig(env, (draft) => {
       const index = draft.upstreams.findIndex((item) => item.name === name);
       if (index === -1) return;
       found = true;
       draft.upstreams.splice(index, 1);
-    });
+    }, false);
     if (!found) return Response.json({ error: '不存在' }, { status: 404 });
     return Response.json({ ok: true });
   } catch (error) {

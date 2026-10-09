@@ -1626,11 +1626,22 @@ async function testExisting(name) {
 }
 
 async function delUpstreamFromModal() {
-  if (!confirm(`确认删除订阅 ${_editingName}？`)) return;
-  await api(`/api/upstreams/${encodeURIComponent(_editingName)}`, { method: 'DELETE' });
+  const name = _editingName;
+  if (!confirm(`确认删除订阅 ${name}？`)) return;
+  let result;
+  try {
+    result = await api(`/api/upstreams/${encodeURIComponent(name)}`, { method: 'DELETE' });
+  } catch (error) {
+    toast(`删除请求失败：${error.message}`, false);
+    return;
+  }
+  if (!result.ok) {
+    toast(result.data?.error || `删除失败（HTTP ${result.status}）`, false);
+    return;
+  }
   toast('已删除');
-  closeEditModal();
-  loadUpstreams();
+  if (_editingName === name) closeEditModal();
+  await loadUpstreams();
 }
 
 async function refreshAllUpstreams() {
@@ -1854,7 +1865,7 @@ function attr(s) {
 }
 function domId(s) { return encodeURIComponent(String(s ?? '')); }
 
-// Auto login with a short-lived HttpOnly cookie; the long-term password is
+// Auto login with a 30-day HttpOnly cookie; the long-term password is
 // never stored in browser JavaScript storage.
 api('/api/admin/session').then(r => { if (r.ok) showDashboard(); });
 </script>

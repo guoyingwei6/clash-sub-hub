@@ -26,7 +26,7 @@
 - 增加受信任 Mirror 预载/上传协议：HMAC-SHA256、5 分钟时间窗、随机 nonce、防重放、严格节点解析和大小限制。
 - 用户 token 改为 256-bit 随机值并只保存 SHA-256；支持权限、禁用、轮换和 Provider/Merge 高风险开关。
 - 停止动态执行或公开 KV 脚本；`/script.js` 只返回构建时审计版本。
-- 管理后台依赖改为同源构建资源，增加 CSP、输入/XSS 防护，并把登录密码换成 15 分钟 HttpOnly 签名会话；Bearer 仅保留给自动化客户端。
+- 管理后台依赖改为同源构建资源，增加 CSP、输入/XSS 防护，并把登录密码换成 30 天 HttpOnly 签名会话；Bearer 仅保留给自动化客户端。
 - 增加 TypeScript、Vitest、覆盖率、安全 fixture 和 Worker dry-run release gate。
 - 增加隔离 Staging Worker/KV、脱敏 Provider Worker、精确主机白名单、强制 Mihomo smoke 和本地只读等效性审计；真实客户端导入仍需用户单独确认。
 - `main` 推送只执行 release gate；生产部署必须手动触发、选择 `DEPLOY_PRODUCTION`，并经过 GitHub `production` environment 门禁。
@@ -331,7 +331,7 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 - **Base64 格式**：`?format=base64` 输出 URI 列表，兼容 Shadowrocket 等客户端
 - **全量同步**：Merge YAML 先预览差异，再显式 replace；失败不切换活动配置
 - **安全构建**：Materialized 只执行编译进 Worker 的生成器，不执行 KV 中的任意 JavaScript
-- **管理后台**：同源 Tailwind/CodeMirror 资源、CSP、15 分钟 HttpOnly/SameSite 签名会话；长期管理员密码不进入浏览器存储
+- **管理后台**：同源 Tailwind/CodeMirror 资源、CSP、30 天 HttpOnly/SameSite 签名会话；同一浏览器登录后 30 天内免登录，主动退出、清除 Cookie 或更改管理员密码后需重新登录；长期管理员密码不进入浏览器存储
 
 ### 技术栈
 
@@ -353,7 +353,7 @@ const hasTUIC = config.proxies.some(p => p.name === "🛠 自建-TUIC");
 | `/mirror/:upstreamId` | POST | HMAC 鉴权的活动 Mirror 缓存上传 |
 | `/mirror-stage/:upstreamId` | POST | 配置激活前的 HMAC Mirror 预载 |
 | `/admin` | GET | 管理后台 |
-| `/api/admin/session` | GET/POST/DELETE | 检查、创建或清除短期管理会话 |
+| `/api/admin/session` | GET/POST/DELETE | 检查、创建或清除 30 天管理会话 |
 | `/api/users` | GET/POST | 用户管理 |
 | `/api/upstreams` | GET/POST | 上游订阅管理 |
 | `/api/custom-nodes` | GET/POST | 自建节点管理 |

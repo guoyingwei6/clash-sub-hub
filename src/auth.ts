@@ -1,6 +1,6 @@
 import { DeploymentEnvironment, Env } from './types';
 
-export const ADMIN_SESSION_TTL_SECONDS = 15 * 60;
+export const ADMIN_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const ADMIN_SESSION_COOKIE = '__Host-clash_admin_session';
 export type ReportedDeploymentEnvironment = DeploymentEnvironment | 'unknown';
 
