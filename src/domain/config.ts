@@ -48,7 +48,7 @@ export interface DesiredConfigV2 extends DesiredConfigDraft {
 }
 
 export const DEFAULT_MATERIALIZED_POLICY: MaterializedPolicy = {
-  filterUpstreamInfoNodes: true,
+  filterUpstreamInfoNodes: false,
   // A subscription hub should keep serving the last-known-good node set when
   // one commercial/free provider is temporarily unavailable. Operators can
   // opt into strict fail-closed behavior in x-clash-sub-hub.policy.

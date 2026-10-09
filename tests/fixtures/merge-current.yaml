@@ -26,3 +26,7 @@ proxies:
     port: 1080
     username: "fixture-user"
     password: "fixture-password"
+
+x-clash-sub-hub:
+  policy:
+    filter-upstream-info-nodes: true

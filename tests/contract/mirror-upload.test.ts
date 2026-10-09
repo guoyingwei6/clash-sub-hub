@@ -7,7 +7,7 @@ import {
 } from '../../src/mirror';
 import { Env } from '../../src/types';
 import { getUpstreamCache, getUpstreamState } from '../../src/storage/upstream-cache';
-import { loadActiveDesiredConfig } from '../../src/storage/config-state';
+import { ACTIVE_CONFIG_KEY, loadActiveDesiredConfig } from '../../src/storage/config-state';
 import { FakeKv } from '../helpers/fake-kv';
 import { stringifyYaml } from '../../src/yaml';
 
@@ -217,6 +217,9 @@ describe('trusted mirror upload', () => {
       }],
     });
     const failed = createEnvironment();
+    const config = await loadActiveDesiredConfig(failed.kv);
+    config.policy.filterUpstreamInfoNodes = true;
+    await failed.kv.put(ACTIVE_CONFIG_KEY, JSON.stringify(config));
     const response = await handleMirrorUpload(
       upstreamId,
       await signedRequest(

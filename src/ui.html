@@ -877,7 +877,7 @@ SOFTWARE.
             <span class="text-xs text-gray-400">过滤含"官网/套餐/流量/到期/剩余"等关键词的节点</span>
           </div>
           <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" id="global-filter" class="sr-only peer" checked>
+            <input type="checkbox" id="global-filter" class="sr-only peer">
             <div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:bg-green-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full"></div>
           </label>
         </div>
@@ -1400,7 +1400,7 @@ async function loadGlobalSettings() {
   if (data) {
     renderUACheckboxes('global-ua-list', data.defaultUA);
     document.getElementById('global-timeout').value = data.fetchTimeout || 15;
-    document.getElementById('global-filter').checked = data.filterEnabled !== false;
+    document.getElementById('global-filter').checked = data.filterEnabled === true;
   }
 }
 
